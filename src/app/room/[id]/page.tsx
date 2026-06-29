@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Peer, { DataConnection } from 'peerjs';
-import { generateDeck, shuffleDeck, dealHands, GameState, Tile } from '@/engine/dominoEngine';
+import { generateDeck, shuffleDeck, dealHands, GameState, Tile, Player } from '@/engine/dominoEngine';
 import { getBotMove } from '@/engine/aiBot';
 import Scoreboard from '@/components/Scoreboard';
 
@@ -51,14 +51,16 @@ export default function Room() {
 
     const { hands, boneyard } = dealHands(deck, finalCount);
 
-    const players = [
-      { id: 'host', name: myName || 'Tú', isBot: false, hand: hands[0], score: 0 },
-      ...connections.map((conn, i) => ({ id: conn.peer, name: `Jugador ${i+2}`, isBot: false, hand: hands[i+1], score: 0 }))
+    const playerList: Player[] = [
+      { id: 'host', name: myName || 'Tú', isBot: false, hand: hands[0], team: 0 as 0 | 1 },
+      ...connections.map((conn, i) => ({ id: conn.peer, name: `Jugador ${i+2}`, isBot: false, hand: hands[i+1], team: ((i+1) % 2) as 0 | 1 }))
     ];
 
-    for (let i = players.length; i < finalCount; i++) {
-      players.push({ id: `bot-${i}`, name: `Bot CPU ${i}`, isBot: true, hand: hands[i], score: 0 });
+    const botList: Player[] = [];
+    for (let i = playerList.length; i < finalCount; i++) {
+      botList.push({ id: `bot-${i}`, name: `Bot CPU ${i}`, isBot: true, hand: hands[i], team: (i % 2) as 0 | 1 });
     }
+    const players = [...playerList, ...botList];
 
     const initialState: GameState = {
       players,
@@ -67,8 +69,11 @@ export default function Room() {
       boneyard,
       leftEnd: null,
       rightEnd: null,
+      scores: [0, 0],
       gameOver: false,
-      winnerIndex: null
+      winnerTeam: null,
+      winnerIndex: null,
+      log: []
     };
 
     setGameState(initialState);
@@ -147,7 +152,7 @@ export default function Room() {
 
   return (
     <div className="min-h-screen p-4 relative">
-      <Scoreboard players={gameState.players.map(p => ({ name: p.name, score: p.score }))} />
+      <Scoreboard scores={gameState.scores} />
 
       <div className="table-wood w-full h-[60vh] mt-12 p-8 flex flex-col items-center justify-center relative overflow-hidden">
         <div className="flex flex-wrap justify-center gap-1 bg-black/20 p-2 rounded max-w-3xl">

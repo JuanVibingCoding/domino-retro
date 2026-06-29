@@ -4,15 +4,26 @@ export interface Tile {
   right: number;
 }
 
+export interface Player {
+  id: string;
+  name: string;
+  isBot: boolean;
+  hand: Tile[];
+  team: 0 | 1;
+}
+
 export interface GameState {
-  players: { id: string; name: string; isBot: boolean; hand: Tile[]; score: number }[];
+  players: Player[];
   board: Tile[];
   currentTurn: number;
   boneyard: Tile[];
   leftEnd: number | null;
   rightEnd: number | null;
+  scores: [number, number];
   gameOver: boolean;
+  winnerTeam: number | null;
   winnerIndex: number | null;
+  log: string[];
 }
 
 export function generateDeck(): Tile[] {
@@ -51,4 +62,19 @@ export function calculateHandScore(players: GameState['players']): number {
   return players.reduce((total, player) => {
     return total + player.hand.reduce((handTotal, tile) => handTotal + tile.left + tile.right, 0);
   }, 0);
+}
+
+export function calculateVenezuelanScore(state: GameState, winnerIndex: number | null): { team: number, points: number } {
+  const team0Points = state.players.filter(p => p.team === 0).reduce((sum, p) => sum + p.hand.reduce((s, t) => s + t.left + t.right, 0), 0);
+  const team1Points = state.players.filter(p => p.team === 1).reduce((sum, p) => sum + p.hand.reduce((s, t) => s + t.left + t.right, 0), 0);
+
+  if (winnerIndex !== null) {
+    const winningTeam = state.players[winnerIndex].team;
+    const losingTeamPoints = winningTeam === 0 ? team1Points : team0Points;
+    return { team: winningTeam, points: losingTeamPoints };
+  } else {
+    if (team0Points < team1Points) return { team: 0, points: team1Points - team0Points };
+    else if (team1Points < team0Points) return { team: 1, points: team0Points - team1Points };
+    else return { team: -1, points: 0 };
+  }
 }
