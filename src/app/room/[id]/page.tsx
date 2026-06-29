@@ -255,35 +255,27 @@ export default function Room() {
             {gameState.phase === 'dealing' ? (
               <div className="text-white animate-pulse text-center text-sm">Barajando...</div>
             ) : (
-              <div ref={boardRef} className="flex flex-col items-center overflow-y-auto w-full h-full px-2 py-1 gap-[2px]">
+              <div ref={boardRef} className="flex flex-col items-center overflow-y-auto w-full h-full px-2 py-1">
                 {gameState.board.length === 0 ? (
-                  <span className="text-white/40 text-xs mx-auto">Juega tu primera ficha</span>
+                  <span className="text-white/40 text-xs mx-auto mt-auto mb-auto">Juega tu primera ficha</span>
                 ) : (() => {
-                  // Build snake rows
-                  const TILE_W = 64; // non-double compact width with border
-                  const TILE_D_W = 34; // double compact width with border
+                  const TILE_W = 64;
+                  const perRow = Math.max(1, Math.floor(boardWidth / TILE_W));
                   const rows: (typeof gameState.board)[] = [];
-                  let cur: typeof gameState.board = [];
-                  let curW = 0;
-                  for (const item of gameState.board) {
-                    const w = item.isHorizontal ? TILE_W : TILE_D_W;
-                    if (cur.length > 0 && curW + w > boardWidth) {
-                      rows.push(cur);
-                      cur = [item];
-                      curW = w;
-                    } else {
-                      cur.push(item);
-                      curW += w;
-                    }
+                  for (let i = 0; i < gameState.board.length; i += perRow) {
+                    rows.push(gameState.board.slice(i, i + perRow));
                   }
-                  if (cur.length) rows.push(cur);
-                  return rows.map((row, ri) => (
-                    <div key={ri} className="flex shrink-0" style={{ flexDirection: ri % 2 === 0 ? 'row' : 'row-reverse', gap: '0' }}>
-                      {row.map((item, idx) => (
-                        <TileComponent key={`${item.tile.id}-${ri}-${idx}`} left={item.tile.left} right={item.tile.right} compact doubleMark={item.tile.left === item.tile.right} isHorizontal={item.isHorizontal} />
+                  return (
+                    <div className="flex flex-col gap-[2px] m-auto items-center">
+                      {rows.map((row, ri) => (
+                        <div key={ri} className="flex" style={{ flexDirection: ri % 2 === 0 ? 'row' : 'row-reverse' }}>
+                          {row.map((item, idx) => (
+                            <TileComponent key={`${item.tile.id}-${ri}-${idx}`} left={item.tile.left} right={item.tile.right} compact doubleMark={item.tile.left === item.tile.right} isHorizontal={item.isHorizontal} />
+                          ))}
+                        </div>
                       ))}
                     </div>
-                  ));
+                  );
                 })()}
               </div>
             )}
