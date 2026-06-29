@@ -12,9 +12,9 @@ import { useSound } from '@/hooks/useSound';
 export default function Room() {
   const params = useParams();
   const roomId = params.id as string;
-  const { playClick } = useSound();
+  const { playClick, playPass, playTranque } = useSound();
 
-  const [peer] = useState<Peer | null>(null);
+  const [peer] = useState<Peer | null>(null); // unused on purpose, kept for PeerJS reference
   const [connections, setConnections] = useState<DataConnection[]>([]);
   const [isHost, setIsHost] = useState(false);
 
@@ -135,6 +135,7 @@ export default function Room() {
 
   const passTurn = () => {
     if (!gameState || gameState.currentTurn !== myPlayerIndex) return;
+    playPass();
 
     const newPlayers = gameState.players.map((p, i) =>
       i === myPlayerIndex ? { ...p, passed: true } : p
@@ -147,6 +148,7 @@ export default function Room() {
     };
 
     if (newPasses >= 4) {
+      playTranque();
       newState = checkWin(newState, null);
     }
 
@@ -204,6 +206,7 @@ export default function Room() {
       };
 
       if (newPasses >= 4) {
+        playTranque();
         newState = checkWin(newState, null);
       }
 
