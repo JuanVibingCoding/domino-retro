@@ -69,95 +69,93 @@ export default function Room() {
 
   const handlePass = () => {
     if (!gameState || gameState.currentTurn !== myPlayerIndex) return;
-    executePass(myPlayerIndex);
+    const newState = executePass(myPlayerIndex, gameState);
+    if (newState && newState.players[newState.currentTurn].isBot) {
+      setTimeout(() => playBotMove(newState), 1500);
+    }
   };
 
-  const executePass = (playerIndex: number) => {
-    if (!gameState) return;
+  const executePass = (playerIndex: number, state: GameState): GameState | null => {
     playPass();
-    const newPlayers = [...gameState.players];
+    const newPlayers = [...state.players];
     newPlayers[playerIndex] = { ...newPlayers[playerIndex], passed: true };
 
-    const newPasses = gameState.consecutivePasses + 1;
+    const newPasses = state.consecutivePasses + 1;
     const nextTurn = (playerIndex + 1) % 4;
 
-    let log = [...gameState.log, `${gameState.players[playerIndex].name} pasó.`];
-    let gameOver = gameState.gameOver;
-    let winnerTeam = gameState.winnerTeam;
-    let scores = [...gameState.scores] as [number, number];
+    let log = [...state.log, `${state.players[playerIndex].name} pasó.`];
+    let gameOver = state.gameOver;
+    let winnerTeam = state.winnerTeam;
+    let scores = [...state.scores] as [number, number];
 
     if (newPasses >= 4) {
       playTranque();
-      log.push(`¡${gameState.players[playerIndex].name} trancó el juego!`);
-      const result = calculateVenezuelanScore({ ...gameState, players: newPlayers }, null);
+      log.push(`¡${state.players[playerIndex].name} trancó el juego!`);
+      const result = calculateVenezuelanScore({ ...state, players: newPlayers }, null);
       if (result.team >= 0) {
         scores[result.team] += result.points;
         if (scores[result.team] >= 100) { gameOver = true; winnerTeam = result.team; }
       }
     }
 
-    const newState = { ...gameState, players: newPlayers, currentTurn: nextTurn, consecutivePasses: newPasses, log, gameOver, winnerTeam, scores };
+    const newState: GameState = { ...state, players: newPlayers, currentTurn: nextTurn, consecutivePasses: newPasses, log, gameOver, winnerTeam, scores };
     setGameState(newState);
     broadcastState(newState);
-
-    if (!gameOver && newState.players[nextTurn].isBot) {
-      setTimeout(() => playBotMove(newState), 1500);
-    }
+    return newState;
   };
 
   const playTile = (tile: Tile, side: 'left' | 'right') => {
     if (!gameState || gameState.currentTurn !== myPlayerIndex) return;
-    executePlay(myPlayerIndex, tile, side);
+    const newState = executePlay(myPlayerIndex, tile, side, gameState);
+    if (newState && newState.players[newState.currentTurn].isBot) {
+      setTimeout(() => playBotMove(newState), 1500);
+    }
   };
 
-  const executePlay = (playerIndex: number, tile: Tile, side: 'left' | 'right') => {
-    if (!gameState) return;
-    const player = gameState.players[playerIndex];
+  const executePlay = (playerIndex: number, tile: Tile, side: 'left' | 'right', state: GameState): GameState | null => {
+    const player = state.players[playerIndex];
     const validTile = player.hand.find(t => t.id === tile.id);
-    if (!validTile) return;
+    if (!validTile) return null;
 
-    const canPlay = canPlayTile(validTile, gameState.leftEnd, gameState.rightEnd);
-    if ((side === 'left' && canPlay.left) || (side === 'right' && canPlay.right)) {
-      playClick();
+    const canPlay = canPlayTile(validTile, state.leftEnd, state.rightEnd);
+    if (!((side === 'left' && canPlay.left) || (side === 'right' && canPlay.right))) return null;
 
-      const orientedTile = getOrientedTile(validTile, side, gameState.leftEnd, gameState.rightEnd);
-      const newPlayers = [...gameState.players];
-      newPlayers[playerIndex] = { ...newPlayers[playerIndex], hand: player.hand.filter(t => t.id !== validTile.id), passed: false };
+    playClick();
 
-      let newBoard = [...gameState.board];
-      if (side === 'left') newBoard.unshift({ tile: orientedTile, isHorizontal: true });
-      else newBoard.push({ tile: orientedTile, isHorizontal: true });
+    const orientedTile = getOrientedTile(validTile, side, state.leftEnd, state.rightEnd);
+    const newPlayers = [...state.players];
+    newPlayers[playerIndex] = { ...newPlayers[playerIndex], hand: player.hand.filter(t => t.id !== validTile.id), passed: false };
 
-      const nextTurn = (playerIndex + 1) % 4;
-      const winner = newPlayers[playerIndex].hand.length === 0 ? playerIndex : null;
-      let newScores = [...gameState.scores] as [number, number];
-      let gameOver = false;
-      let winnerTeam = null;
-      let log = [...gameState.log, `${player.name} jugó [${validTile.left}|${validTile.right}]`];
+    let newBoard = [...state.board];
+    if (side === 'left') newBoard.unshift({ tile: orientedTile, isHorizontal: true });
+    else newBoard.push({ tile: orientedTile, isHorizontal: true });
 
-      if (winner !== null) {
-        log.push(`¡${player.name} se fue!`);
-        const result = calculateVenezuelanScore({ ...gameState, players: newPlayers }, winner);
-        if (result.team >= 0) {
-          newScores[result.team] += result.points;
-          if (newScores[result.team] >= 100) { gameOver = true; winnerTeam = result.team; }
-        }
-      }
+    const nextTurn = (playerIndex + 1) % 4;
+    const winner = newPlayers[playerIndex].hand.length === 0 ? playerIndex : null;
+    let newScores = [...state.scores] as [number, number];
+    let gameOver = false;
+    let winnerTeam = null;
+    let log = [...state.log, `${player.name} jugó [${validTile.left}|${validTile.right}]`];
 
-      const newState = {
-        ...gameState, players: newPlayers, board: newBoard, currentTurn: nextTurn,
-        leftEnd: newBoard[0].tile.left, rightEnd: newBoard[newBoard.length - 1].tile.right,
-        scores: newScores, gameOver, winnerTeam, log, consecutivePasses: 0
-      };
-
-      setGameState(newState);
-      broadcastState(newState);
-      setSelectedTile(null);
-
-      if (!gameOver && newPlayers[nextTurn].isBot) {
-        setTimeout(() => playBotMove(newState), 1500);
+    if (winner !== null) {
+      log.push(`¡${player.name} se fue!`);
+      const result = calculateVenezuelanScore({ ...state, players: newPlayers }, winner);
+      if (result.team >= 0) {
+        newScores[result.team] += result.points;
+        if (newScores[result.team] >= 100) { gameOver = true; winnerTeam = result.team; }
       }
     }
+
+    const newState: GameState = {
+      ...state, players: newPlayers, board: newBoard, currentTurn: nextTurn,
+      leftEnd: newBoard[0].tile.left, rightEnd: newBoard[newBoard.length - 1].tile.right,
+      scores: newScores, gameOver, winnerTeam, log, consecutivePasses: 0
+    };
+
+    setGameState(newState);
+    broadcastState(newState);
+    setSelectedTile(null);
+    return newState;
   };
 
   const playBotMove = (state: GameState) => {
@@ -166,9 +164,15 @@ export default function Room() {
     const move = getBotMove(bot.hand, state.leftEnd, state.rightEnd);
 
     if (move) {
-      executePlay(botIndex, move.tile, move.side);
+      const newState = executePlay(botIndex, move.tile, move.side, state);
+      if (newState && !newState.gameOver && newState.players[newState.currentTurn].isBot) {
+        setTimeout(() => playBotMove(newState), 1500);
+      }
     } else {
-      executePass(botIndex);
+      const newState = executePass(botIndex, state);
+      if (newState && !newState.gameOver && newState.players[newState.currentTurn].isBot) {
+        setTimeout(() => playBotMove(newState), 1500);
+      }
     }
   };
 
@@ -190,91 +194,90 @@ export default function Room() {
   });
 
   return (
-    <div className="min-h-screen bg-[#b8a690] p-4 relative font-mono overflow-hidden">
+    <div className="min-h-screen bg-[#b8a690] relative font-mono overflow-hidden flex flex-col" style={{ height: '100dvh' }}>
       <button onClick={() => setShowScores(!showScores)} className="absolute top-2 right-2 z-20 bg-gray-800 text-white text-[10px] px-2 py-1 border-2 border-white shadow-[2px_2px_0px_#000]">
         {showScores ? '✕' : 'Pts'}
       </button>
       {showScores && <Scoreboard scores={gameState.scores} teamNames={["Nosotros", "Ellos"]} />}
 
-      <div className="grid grid-cols-3 grid-rows-[auto_1fr_auto] h-[85vh] gap-2 mt-8">
-        {/* Arriba - Compañero */}
-        <div className="col-span-3 row-start-1 flex flex-col items-center justify-start p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden ${gameState.players[2].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 2 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
-              <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
-              <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
-            </div>
-            <span className={`text-sm font-bold tracking-wide ${gameState.currentTurn === 2 ? 'text-yellow-400' : 'text-white'}`}>
-              {gameState.players[2].name}
-            </span>
-            <span className="text-gray-300 text-[10px]">({gameState.players[2].hand.length})</span>
+      {/* Top - Partner */}
+      <div className="flex flex-col items-center py-2 shrink-0">
+        <div className="flex items-center gap-2 mb-1">
+          <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden ${gameState.players[2].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 2 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
+            <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
+            <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
           </div>
-          <div className="flex gap-[2px]">
-            {gameState.players[2].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown tiny />)}
-          </div>
+          <span className={`text-sm font-bold tracking-wide ${gameState.currentTurn === 2 ? 'text-yellow-400' : 'text-white'}`}>
+            {gameState.players[2].name}
+          </span>
+          <span className="text-gray-300 text-[10px]">({gameState.players[2].hand.length})</span>
         </div>
+        <div className="flex gap-[2px]">
+          {gameState.players[2].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown tiny />)}
+        </div>
+      </div>
 
-        {/* Izquierda - Rival 1 */}
-        <div className="col-start-1 row-start-2 flex flex-col items-center justify-center">
-          <div className="flex flex-col items-center gap-2 mb-2">
-            <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden ${gameState.players[1].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 1 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
-              <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
-              <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
-            </div>
-            <span className={`text-sm font-bold tracking-wide text-center ${gameState.currentTurn === 1 ? 'text-yellow-400' : 'text-white'}`}>
-              {gameState.players[1].name}
-            </span>
-            <span className="text-gray-300 text-[10px]">({gameState.players[1].hand.length})</span>
+      {/* Middle: Rivals + Board */}
+      <div className="flex-1 flex items-stretch min-h-0 px-2">
+        {/* Left rival */}
+        <div className="flex flex-col items-center justify-center shrink-0 px-1">
+          <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden mb-2 ${gameState.players[1].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 1 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
+            <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
+            <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
           </div>
+          <span className={`text-sm font-bold tracking-wide text-center mb-2 ${gameState.currentTurn === 1 ? 'text-yellow-400' : 'text-white'}`}>
+            {gameState.players[1].name}
+          </span>
+          <span className="text-gray-300 text-[10px] mb-1">({gameState.players[1].hand.length})</span>
           <div className="flex flex-col gap-[2px]">
             {gameState.players[1].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown tiny />)}
           </div>
         </div>
 
-        {/* Centro - Mesa */}
-        <div className="col-start-2 row-start-2 flex items-center justify-center">
-          <div className="bg-[#1e5631] border-4 border-[#5e3a1c] p-4 w-full h-full flex items-center justify-center relative shadow-[8px_8px_0px_#000]">
+        {/* Board - full width */}
+        <div className="flex-1 flex items-center justify-center px-2">
+          <div className="bg-[#1e5631] border-4 border-[#5e3a1c] w-full h-full flex items-center justify-center relative shadow-[8px_8px_0px_#000]" style={{ minHeight: '60px' }}>
             {gameState.phase === 'dealing' ? (
               <div className="text-white animate-pulse text-center text-sm">Barajando...</div>
             ) : (
-              <div className="flex items-start gap-0 overflow-x-auto max-w-full px-1 min-h-[40px]" style={{ flexFlow: 'row nowrap' }}>
-                {gameState.board.map((item, idx) => (
-                  <div key={`${item.tile.id}-${idx}`} className="flex items-start shrink-0">
-                    <TileComponent left={item.tile.left} right={item.tile.right} isHorizontal compact doubleMark={item.tile.left === item.tile.right} />
-                  </div>
-                ))}
+              <div className="flex items-center overflow-x-auto w-full px-2" style={{ flexFlow: 'row nowrap' }}>
+                {gameState.board.length === 0 ? (
+                  <span className="text-white/40 text-xs mx-auto">Juega tu primera ficha</span>
+                ) : (
+                  gameState.board.map((item, idx) => (
+                    <div key={`${item.tile.id}-${idx}`} className="shrink-0">
+                      <TileComponent left={item.tile.left} right={item.tile.right} isHorizontal compact doubleMark={item.tile.left === item.tile.right} />
+                    </div>
+                  ))
+                )}
               </div>
             )}
 
             {gameState.log.length > 0 && (
-              <div className="absolute bottom-2 left-2 right-2 bg-black/80 text-white text-xs p-1 text-center truncate">
+              <div className="absolute bottom-1 left-2 right-2 bg-black/80 text-white text-[10px] p-1 text-center truncate">
                 {gameState.log[gameState.log.length - 1]}
               </div>
             )}
           </div>
         </div>
 
-        {/* Derecha - Rival 2 */}
-        <div className="col-start-3 row-start-2 flex flex-col items-center justify-center">
-          <div className="flex flex-col items-center gap-2 mb-2">
-            <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden ${gameState.players[3].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 3 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
-              <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
-              <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
-            </div>
-            <span className={`text-sm font-bold tracking-wide text-center ${gameState.currentTurn === 3 ? 'text-yellow-400' : 'text-white'}`}>
-              {gameState.players[3].name}
-            </span>
-            <span className="text-gray-300 text-[10px]">({gameState.players[3].hand.length})</span>
+        {/* Right rival */}
+        <div className="flex flex-col items-center justify-center shrink-0 px-1">
+          <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden mb-2 ${gameState.players[3].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 3 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
+            <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
+            <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
           </div>
+          <span className={`text-sm font-bold tracking-wide text-center mb-2 ${gameState.currentTurn === 3 ? 'text-yellow-400' : 'text-white'}`}>
+            {gameState.players[3].name}
+          </span>
+          <span className="text-gray-300 text-[10px] mb-1">({gameState.players[3].hand.length})</span>
           <div className="flex flex-col gap-[2px]">
             {gameState.players[3].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown tiny />)}
           </div>
         </div>
-
-        <div className="col-span-3 row-start-3"></div>
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-[#111] p-4 border-t-4 border-[#5e3a1c] z-20">
