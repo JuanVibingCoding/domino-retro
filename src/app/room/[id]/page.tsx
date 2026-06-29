@@ -125,9 +125,8 @@ export default function Room() {
       newPlayers[playerIndex] = { ...newPlayers[playerIndex], hand: player.hand.filter(t => t.id !== validTile.id), passed: false };
 
       let newBoard = [...gameState.board];
-      const isDouble = orientedTile.left === orientedTile.right;
-      if (side === 'left') newBoard.unshift({ tile: orientedTile, isHorizontal: isDouble });
-      else newBoard.push({ tile: orientedTile, isHorizontal: isDouble });
+      if (side === 'left') newBoard.unshift({ tile: orientedTile, isHorizontal: true });
+      else newBoard.push({ tile: orientedTile, isHorizontal: true });
 
       const nextTurn = (playerIndex + 1) % 4;
       const winner = newPlayers[playerIndex].hand.length === 0 ? playerIndex : null;
@@ -240,9 +239,11 @@ export default function Room() {
             {gameState.phase === 'dealing' ? (
               <div className="text-white animate-pulse text-center text-sm">Barajando...</div>
             ) : (
-              <div className="flex items-center gap-0 overflow-x-auto max-w-full px-1">
+              <div className="flex items-center overflow-x-auto max-w-full px-1 min-h-[50px]" style={{ flexFlow: 'row nowrap' }}>
                 {gameState.board.map((item, idx) => (
-                  <TileComponent key={`${item.tile.id}-${idx}`} left={item.tile.left} right={item.tile.right} isHorizontal={item.isHorizontal} />
+                    <div key={`${item.tile.id}-${idx}`} className="flex items-center" style={{ marginLeft: idx > 0 ? '-3px' : '0' }}>
+                    <TileComponent left={item.tile.left} right={item.tile.right} isHorizontal doubleMark={item.tile.left === item.tile.right} />
+                  </div>
                 ))}
               </div>
             )}
