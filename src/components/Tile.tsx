@@ -9,13 +9,21 @@ const PIP_POSITIONS: Record<number, string[]> = {
   6: ['top-left', 'top-right', 'mid-left', 'mid-right', 'bottom-left', 'bottom-right']
 };
 
-export default function Tile({ left, right, isHorizontal = false, faceDown = false, onClick, playable }: {
-  left: number; right: number; isHorizontal?: boolean; faceDown?: boolean; onClick?: () => void; playable?: boolean;
+export default function Tile({ left, right, isHorizontal = false, faceDown = false, tiny = false, onClick, playable }: {
+  left: number; right: number; isHorizontal?: boolean; faceDown?: boolean; tiny?: boolean; onClick?: () => void; playable?: boolean;
 }) {
   const tileW = isHorizontal ? 80 : 40;
   const tileH = isHorizontal ? 40 : 80;
 
   if (faceDown) {
+    if (tiny) {
+      return (
+        <div
+          className="bg-[#1a1a1a] border border-[#444] shadow-[1px_1px_0px_#000]"
+          style={{ width: '12px', height: '24px', imageRendering: 'pixelated' }}
+        />
+      );
+    }
     return (
       <div
         className="bg-[#1a1a1a] border-2 border-[#444] shadow-[3px_3px_0px_#000]"

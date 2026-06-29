@@ -22,6 +22,7 @@ export default function Room() {
   const [myName, setMyName] = useState('');
   const [myPlayerIndex, setMyPlayerIndex] = useState(0);
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const [showScores, setShowScores] = useState(true);
 
   useEffect(() => {
     const newPeer = new Peer(roomId);
@@ -124,8 +125,9 @@ export default function Room() {
       newPlayers[playerIndex] = { ...newPlayers[playerIndex], hand: player.hand.filter(t => t.id !== validTile.id), passed: false };
 
       let newBoard = [...gameState.board];
-      if (side === 'left') newBoard.unshift({ tile: orientedTile, isHorizontal: true });
-      else newBoard.push({ tile: orientedTile, isHorizontal: true });
+      const isDouble = orientedTile.left === orientedTile.right;
+      if (side === 'left') newBoard.unshift({ tile: orientedTile, isHorizontal: isDouble });
+      else newBoard.push({ tile: orientedTile, isHorizontal: isDouble });
 
       const nextTurn = (playerIndex + 1) % 4;
       const winner = newPlayers[playerIndex].hand.length === 0 ? playerIndex : null;
@@ -190,38 +192,45 @@ export default function Room() {
 
   return (
     <div className="min-h-screen bg-[#b8a690] p-4 relative font-mono overflow-hidden">
-      <Scoreboard scores={gameState.scores} teamNames={["Nosotros", "Ellos"]} />
+      <button onClick={() => setShowScores(!showScores)} className="absolute top-2 right-2 z-20 bg-gray-800 text-white text-[10px] px-2 py-1 border-2 border-white shadow-[2px_2px_0px_#000]">
+        {showScores ? '✕' : 'Pts'}
+      </button>
+      {showScores && <Scoreboard scores={gameState.scores} teamNames={["Nosotros", "Ellos"]} />}
 
       <div className="grid grid-cols-3 grid-rows-3 h-[80vh] gap-4 mt-8">
         {/* Arriba - Compañero */}
         <div className="col-span-3 row-start-1 flex flex-col items-center justify-start p-4">
           <div className="flex items-center gap-2 mb-2">
-            <div className={`w-8 h-8 border-2 border-white shadow-[2px_2px_0px_#000] flex items-center justify-center ${gameState.players[2].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 2 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
-              <span className="text-white text-[10px] font-bold">P</span>
+            <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden ${gameState.players[2].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 2 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
+              <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
+              <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
             </div>
             <span className={`text-sm font-bold tracking-wide ${gameState.currentTurn === 2 ? 'text-yellow-400' : 'text-white'}`}>
               {gameState.players[2].name}
             </span>
             <span className="text-gray-300 text-[10px]">({gameState.players[2].hand.length})</span>
           </div>
-          <div className="flex gap-1">
-            {gameState.players[2].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown isHorizontal />)}
+          <div className="flex gap-[2px]">
+            {gameState.players[2].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown tiny />)}
           </div>
         </div>
 
         {/* Izquierda - Rival 1 */}
         <div className="col-start-1 row-start-2 flex flex-col items-center justify-center">
           <div className="flex flex-col items-center gap-2 mb-2">
-            <div className={`w-8 h-8 border-2 border-white shadow-[2px_2px_0px_#000] flex items-center justify-center ${gameState.players[1].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 1 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
-              <span className="text-white text-[10px] font-bold">R</span>
+            <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden ${gameState.players[1].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 1 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
+              <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
+              <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
             </div>
             <span className={`text-sm font-bold tracking-wide text-center ${gameState.currentTurn === 1 ? 'text-yellow-400' : 'text-white'}`}>
               {gameState.players[1].name}
             </span>
             <span className="text-gray-300 text-[10px]">({gameState.players[1].hand.length})</span>
           </div>
-          <div className="flex flex-col gap-1">
-            {gameState.players[1].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown />)}
+          <div className="flex flex-col gap-[2px]">
+            {gameState.players[1].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown tiny />)}
           </div>
         </div>
 
@@ -231,9 +240,9 @@ export default function Room() {
             {gameState.phase === 'dealing' ? (
               <div className="text-white animate-pulse text-center text-sm">Barajando...</div>
             ) : (
-              <div className="flex flex-wrap justify-center gap-0 max-w-md max-h-full overflow-hidden">
+              <div className="flex items-center gap-0 overflow-x-auto max-w-full px-1">
                 {gameState.board.map((item, idx) => (
-                  <TileComponent key={`${item.tile.id}-${idx}`} left={item.tile.left} right={item.tile.right} isHorizontal />
+                  <TileComponent key={`${item.tile.id}-${idx}`} left={item.tile.left} right={item.tile.right} isHorizontal={item.isHorizontal} />
                 ))}
               </div>
             )}
@@ -249,16 +258,18 @@ export default function Room() {
         {/* Derecha - Rival 2 */}
         <div className="col-start-3 row-start-2 flex flex-col items-center justify-center">
           <div className="flex flex-col items-center gap-2 mb-2">
-            <div className={`w-8 h-8 border-2 border-white shadow-[2px_2px_0px_#000] flex items-center justify-center ${gameState.players[3].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 3 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
-              <span className="text-white text-[10px] font-bold">R</span>
+            <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden ${gameState.players[3].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 3 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
+              <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
+              <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
             </div>
             <span className={`text-sm font-bold tracking-wide text-center ${gameState.currentTurn === 3 ? 'text-yellow-400' : 'text-white'}`}>
               {gameState.players[3].name}
             </span>
             <span className="text-gray-300 text-[10px]">({gameState.players[3].hand.length})</span>
           </div>
-          <div className="flex flex-col gap-1">
-            {gameState.players[3].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown />)}
+          <div className="flex flex-col gap-[2px]">
+            {gameState.players[3].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown tiny />)}
           </div>
         </div>
 
@@ -267,10 +278,12 @@ export default function Room() {
 
       <div className="fixed bottom-0 left-0 right-0 bg-[#111] p-4 border-t-4 border-[#5e3a1c] z-20">
         <div className="flex items-center justify-center gap-2 mb-1">
-          <div className={`w-6 h-6 border border-white shadow-[1px_1px_0px_#000] flex items-center justify-center ${gameState.players[0].team === 0 ? 'bg-blue-600' : 'bg-red-600'}`}>
-            <span className="text-white text-[8px] font-bold">T</span>
+          <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden ${gameState.players[0].team === 0 ? 'bg-blue-600' : 'bg-red-600'}`}>
+            <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
+            <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
           </div>
-          <span className={`text-xs font-bold ${gameState.currentTurn === 0 ? 'text-yellow-400' : 'text-gray-300'}`}>
+          <span className={`text-sm font-bold ${gameState.currentTurn === 0 ? 'text-yellow-400' : 'text-gray-300'}`}>
             {gameState.players[0].name}
           </span>
         </div>
