@@ -126,9 +126,10 @@ export default function Room() {
     const newPlayers = [...state.players];
     newPlayers[playerIndex] = { ...newPlayers[playerIndex], hand: player.hand.filter(t => t.id !== validTile.id), passed: false };
 
-    let newBoard = [...state.board];
-    if (side === 'left') newBoard.unshift({ tile: orientedTile, isHorizontal: true });
-    else newBoard.push({ tile: orientedTile, isHorizontal: true });
+      let newBoard = [...state.board];
+      const isDouble = orientedTile.left === orientedTile.right;
+      if (side === 'left') newBoard.unshift({ tile: orientedTile, isHorizontal: !isDouble });
+      else newBoard.push({ tile: orientedTile, isHorizontal: !isDouble });
 
     const nextTurn = (playerIndex + 1) % 4;
     const winner = newPlayers[playerIndex].hand.length === 0 ? playerIndex : null;
@@ -242,13 +243,13 @@ export default function Room() {
             {gameState.phase === 'dealing' ? (
               <div className="text-white animate-pulse text-center text-sm">Barajando...</div>
             ) : (
-              <div className="flex items-center overflow-x-auto w-full px-2" style={{ flexFlow: 'row nowrap' }}>
+              <div className="flex items-center overflow-x-auto w-full px-2 justify-center" style={{ flexFlow: 'row nowrap' }}>
                 {gameState.board.length === 0 ? (
                   <span className="text-white/40 text-xs mx-auto">Juega tu primera ficha</span>
                 ) : (
                   gameState.board.map((item, idx) => (
                     <div key={`${item.tile.id}-${idx}`} className="shrink-0">
-                      <TileComponent left={item.tile.left} right={item.tile.right} isHorizontal compact doubleMark={item.tile.left === item.tile.right} />
+                      <TileComponent left={item.tile.left} right={item.tile.right} compact doubleMark={item.tile.left === item.tile.right} isHorizontal={item.isHorizontal} />
                     </div>
                   ))
                 )}
