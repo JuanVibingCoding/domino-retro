@@ -152,7 +152,7 @@ export default function Room() {
 
   return (
     <div className="min-h-screen p-4 relative">
-      <Scoreboard scores={gameState.scores} />
+      <Scoreboard scores={gameState.scores} teamNames={['Equipo A', 'Equipo B']} />
 
       <div className="table-wood w-full h-[60vh] mt-12 p-8 flex flex-col items-center justify-center relative overflow-hidden">
         <div className="flex flex-wrap justify-center gap-1 bg-black/20 p-2 rounded max-w-3xl">
