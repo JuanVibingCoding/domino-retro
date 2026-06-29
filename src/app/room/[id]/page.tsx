@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Peer, { DataConnection } from 'peerjs';
 import { generateDeck, shuffleDeck, dealHands, GameState, Tile, canPlayTile, getOrientedTile, calculateVenezuelanScore } from '@/engine/dominoEngine';
@@ -23,6 +23,18 @@ export default function Room() {
   const [myPlayerIndex, setMyPlayerIndex] = useState(0);
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [showScores, setShowScores] = useState(true);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [boardWidth, setBoardWidth] = useState(400);
+
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      setBoardWidth(entries[0].contentRect.width);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   useEffect(() => {
     const newPeer = new Peer(roomId);
@@ -243,16 +255,36 @@ export default function Room() {
             {gameState.phase === 'dealing' ? (
               <div className="text-white animate-pulse text-center text-sm">Barajando...</div>
             ) : (
-              <div className="flex items-center overflow-x-auto w-full px-2 justify-center" style={{ flexFlow: 'row nowrap' }}>
+              <div ref={boardRef} className="flex flex-col items-center overflow-y-auto w-full h-full px-2 py-1 gap-[2px]">
                 {gameState.board.length === 0 ? (
                   <span className="text-white/40 text-xs mx-auto">Juega tu primera ficha</span>
-                ) : (
-                  gameState.board.map((item, idx) => (
-                    <div key={`${item.tile.id}-${idx}`} className="shrink-0">
-                      <TileComponent left={item.tile.left} right={item.tile.right} compact doubleMark={item.tile.left === item.tile.right} isHorizontal={item.isHorizontal} />
+                ) : (() => {
+                  // Build snake rows
+                  const TILE_W = 64; // non-double compact width with border
+                  const TILE_D_W = 34; // double compact width with border
+                  const rows: (typeof gameState.board)[] = [];
+                  let cur: typeof gameState.board = [];
+                  let curW = 0;
+                  for (const item of gameState.board) {
+                    const w = item.isHorizontal ? TILE_W : TILE_D_W;
+                    if (cur.length > 0 && curW + w > boardWidth) {
+                      rows.push(cur);
+                      cur = [item];
+                      curW = w;
+                    } else {
+                      cur.push(item);
+                      curW += w;
+                    }
+                  }
+                  if (cur.length) rows.push(cur);
+                  return rows.map((row, ri) => (
+                    <div key={ri} className="flex shrink-0" style={{ flexDirection: ri % 2 === 0 ? 'row' : 'row-reverse', gap: '0' }}>
+                      {row.map((item, idx) => (
+                        <TileComponent key={`${item.tile.id}-${ri}-${idx}`} left={item.tile.left} right={item.tile.right} compact doubleMark={item.tile.left === item.tile.right} isHorizontal={item.isHorizontal} />
+                      ))}
                     </div>
-                  ))
-                )}
+                  ));
+                })()}
               </div>
             )}
 
