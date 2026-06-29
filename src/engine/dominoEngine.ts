@@ -10,11 +10,12 @@ export interface Player {
   isBot: boolean;
   hand: Tile[];
   team: 0 | 1;
+  passed: boolean;
 }
 
 export interface GameState {
   players: Player[];
-  board: Tile[];
+  board: { tile: Tile; isHorizontal: boolean }[];
   currentTurn: number;
   boneyard: Tile[];
   leftEnd: number | null;
@@ -22,8 +23,9 @@ export interface GameState {
   scores: [number, number];
   gameOver: boolean;
   winnerTeam: number | null;
-  winnerIndex: number | null;
   log: string[];
+  phase: 'dealing' | 'playing' | 'gameOver';
+  consecutivePasses: number;
 }
 
 export function generateDeck(): Tile[] {
@@ -77,4 +79,15 @@ export function calculateVenezuelanScore(state: GameState, winnerIndex: number |
     else if (team1Points < team0Points) return { team: 1, points: team0Points - team1Points };
     else return { team: -1, points: 0 };
   }
+}
+
+export function getOrientedTile(tile: Tile, side: 'left' | 'right', leftEnd: number | null, rightEnd: number | null): Tile {
+  if (side === 'left') {
+    if (tile.right === leftEnd) return tile;
+    if (tile.left === leftEnd) return { ...tile, left: tile.right, right: tile.left };
+  } else {
+    if (tile.left === rightEnd) return tile;
+    if (tile.right === rightEnd) return { ...tile, left: tile.right, right: tile.left };
+  }
+  return tile;
 }

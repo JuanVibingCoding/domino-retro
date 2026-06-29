@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Peer, { DataConnection } from 'peerjs';
-import { generateDeck, shuffleDeck, dealHands, GameState, Tile, Player, canPlayTile, calculateVenezuelanScore } from '@/engine/dominoEngine';
+import { generateDeck, shuffleDeck, dealHands, GameState, Tile, Player, canPlayTile, calculateVenezuelanScore, getOrientedTile } from '@/engine/dominoEngine';
 import { getBotMove } from '@/engine/aiBot';
 import Scoreboard from '@/components/Scoreboard';
 import TileComponent from '@/components/Tile';
@@ -14,27 +14,24 @@ export default function Room() {
   const roomId = params.id as string;
   const { playClick } = useSound();
 
-  const [peer, setPeer] = useState<Peer | null>(null);
+  const [peer] = useState<Peer | null>(null);
   const [connections, setConnections] = useState<DataConnection[]>([]);
   const [isHost, setIsHost] = useState(false);
-  const [myId, setMyId] = useState('');
 
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [myName, setMyName] = useState('');
-  const [myPlayerIndex, setMyPlayerIndex] = useState(0);
+  const [myPlayerIndex] = useState(0);
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
 
   useEffect(() => {
     const newPeer = new Peer(roomId);
     newPeer.on('open', (id) => {
-      setMyId(id);
       setIsHost(id === roomId);
     });
     newPeer.on('connection', (conn) => {
       setConnections(prev => [...prev, conn]);
       conn.on('data', (data) => handleNetworkData(data));
     });
-    setPeer(newPeer);
     return () => { newPeer.destroy(); };
   }, [roomId]);
 
@@ -47,16 +44,17 @@ export default function Room() {
     const { hands, boneyard } = dealHands(deck, 4);
 
     const players: Player[] = [
-      { id: 'host', name: myName || 'Tú', isBot: false, hand: hands[0], team: 0 as const },
-      { id: 'bot-1', name: 'Bot CPU 1', isBot: true, hand: hands[1], team: 1 as const },
-      { id: 'bot-2', name: 'Bot CPU 2 (Tu Pareja)', isBot: true, hand: hands[2], team: 0 as const },
-      { id: 'bot-3', name: 'Bot CPU 3', isBot: true, hand: hands[3], team: 1 as const }
+      { id: 'host', name: myName || 'Tú', isBot: false, hand: hands[0], team: 0 as const, passed: false },
+      { id: 'bot-1', name: 'Bot CPU 1', isBot: true, hand: hands[1], team: 1 as const, passed: false },
+      { id: 'bot-2', name: 'Bot CPU 2 (Tu Pareja)', isBot: true, hand: hands[2], team: 0 as const, passed: false },
+      { id: 'bot-3', name: 'Bot CPU 3', isBot: true, hand: hands[3], team: 1 as const, passed: false }
     ];
 
     const initialState: GameState = {
       players, board: [], currentTurn: 0, boneyard,
       leftEnd: null, rightEnd: null, scores: [0, 0],
-      gameOver: false, winnerTeam: null, winnerIndex: null, log: ['Empieza la partida']
+      gameOver: false, winnerTeam: null,
+      log: ['Empieza la partida'], phase: 'playing', consecutivePasses: 0
     };
 
     setGameState(initialState);
@@ -67,6 +65,36 @@ export default function Room() {
     connections.forEach(conn => conn.send({ type: 'STATE_UPDATE', payload: state }));
   };
 
+  const advanceTurn = (state: GameState, nextTurn: number) => {
+    let newState = { ...state, currentTurn: nextTurn };
+    return newState;
+  };
+
+  const checkWin = (state: GameState, winnerIndex: number | null): GameState => {
+    if (winnerIndex === null) {
+      // Check for lock (tranque) - all 4 passed
+      if (state.players.every(p => p.passed)) {
+        const result = calculateVenezuelanScore(state, null);
+        if (result.team >= 0) {
+          const newScores = [...state.scores] as [number, number];
+          newScores[result.team] += result.points;
+          return { ...state, scores: newScores, gameOver: newScores[result.team] >= 100, winnerTeam: newScores[result.team] >= 100 ? result.team : null, phase: newScores[result.team] >= 100 ? 'gameOver' : 'playing' };
+        }
+        return state;
+      }
+      return state;
+    }
+
+    const result = calculateVenezuelanScore(state, winnerIndex);
+    if (result.team >= 0) {
+      const newScores = [...state.scores] as [number, number];
+      newScores[result.team] += result.points;
+      const gameOver = newScores[result.team] >= 100;
+      return { ...state, scores: newScores, gameOver, winnerTeam: gameOver ? result.team : null, phase: gameOver ? 'gameOver' : 'playing' };
+    }
+    return state;
+  };
+
   const playTile = (tile: Tile, side: 'left' | 'right') => {
     if (!gameState || gameState.currentTurn !== myPlayerIndex) return;
 
@@ -74,45 +102,59 @@ export default function Room() {
     if ((side === 'left' && canPlay.left) || (side === 'right' && canPlay.right)) {
       playClick();
 
-      const newPlayers = [...gameState.players];
-      newPlayers[myPlayerIndex].hand = newPlayers[myPlayerIndex].hand.filter(t => t.id !== tile.id);
+      const orientedTile = getOrientedTile(tile, side, gameState.leftEnd, gameState.rightEnd);
+      const newPlayers = gameState.players.map((p, i) =>
+        i === myPlayerIndex ? { ...p, hand: p.hand.filter(t => t.id !== tile.id), passed: false } : { ...p, passed: false }
+      );
 
       let newBoard = [...gameState.board];
-      if (side === 'left') newBoard.unshift(tile);
-      else newBoard.push(tile);
+      const boardEntry = { tile: orientedTile, isHorizontal: true };
+      if (side === 'left') newBoard.unshift(boardEntry);
+      else newBoard.push(boardEntry);
 
-      let nextTurn = (gameState.currentTurn + 1) % 4;
-      let winner = newPlayers[myPlayerIndex].hand.length === 0 ? myPlayerIndex : null;
+      const nextTurn = (gameState.currentTurn + 1) % 4;
+      const winner = newPlayers[myPlayerIndex].hand.length === 0 ? myPlayerIndex : null;
 
-      let newScores = [...gameState.scores] as [number, number];
-      let gameOver = false;
-      let winnerTeam = null;
-
-      if (winner !== null) {
-        const result = calculateVenezuelanScore({ ...gameState, players: newPlayers }, winner);
-        if (result.team >= 0) {
-          newScores[result.team] += result.points;
-          if (newScores[result.team] >= 100) {
-            gameOver = true;
-            winnerTeam = result.team;
-          }
-        }
-      }
-
-      const newState = {
+      let newState: GameState = {
         ...gameState, players: newPlayers, board: newBoard,
         currentTurn: nextTurn,
-        leftEnd: newBoard[0].left, rightEnd: newBoard[newBoard.length - 1].right,
-        scores: newScores, gameOver, winnerTeam
+        leftEnd: newBoard[0].tile.left, rightEnd: newBoard[newBoard.length - 1].tile.right,
+        consecutivePasses: 0
       };
 
+      newState = checkWin(newState, winner);
       setGameState(newState);
       broadcastState(newState);
       setSelectedTile(null);
 
-      if (!gameOver && newPlayers[nextTurn].isBot) {
+      if (!newState.gameOver && newState.players[nextTurn].isBot) {
         setTimeout(() => playBotMove(newState), 1500);
       }
+    }
+  };
+
+  const passTurn = () => {
+    if (!gameState || gameState.currentTurn !== myPlayerIndex) return;
+
+    const newPlayers = gameState.players.map((p, i) =>
+      i === myPlayerIndex ? { ...p, passed: true } : p
+    );
+    const nextTurn = (gameState.currentTurn + 1) % 4;
+    const newPasses = gameState.consecutivePasses + 1;
+
+    let newState: GameState = {
+      ...gameState, players: newPlayers, currentTurn: nextTurn, consecutivePasses: newPasses
+    };
+
+    if (newPasses >= 4) {
+      newState = checkWin(newState, null);
+    }
+
+    setGameState(newState);
+    broadcastState(newState);
+
+    if (!newState.gameOver && newState.players[nextTurn].isBot) {
+      setTimeout(() => playBotMove(newState), 1500);
     }
   };
 
@@ -123,36 +165,54 @@ export default function Room() {
 
     if (move) {
       playClick();
-      const newPlayers = [...state.players];
-      newPlayers[botIndex].hand = bot.hand.filter(t => t.id !== move.tile.id);
+      const orientedTile = getOrientedTile(move.tile, move.side, state.leftEnd, state.rightEnd);
+      const newPlayers = state.players.map((p, i) =>
+        i === botIndex ? { ...p, hand: p.hand.filter(t => t.id !== move.tile.id), passed: false } : { ...p, passed: false }
+      );
+
       let newBoard = [...state.board];
-      if (move.side === 'left') newBoard.unshift(move.tile);
-      else newBoard.push(move.tile);
+      const boardEntry = { tile: orientedTile, isHorizontal: true };
+      if (move.side === 'left') newBoard.unshift(boardEntry);
+      else newBoard.push(boardEntry);
 
-      let nextTurn = (botIndex + 1) % 4;
-      let winner = newPlayers[botIndex].hand.length === 0 ? botIndex : null;
-      let newScores = [...state.scores] as [number, number];
-      let gameOver = false;
-      let winnerTeam = null;
+      const nextTurn = (botIndex + 1) % 4;
+      const winner = newPlayers[botIndex].hand.length === 0 ? botIndex : null;
 
-      if (winner !== null) {
-        const result = calculateVenezuelanScore({ ...state, players: newPlayers }, winner);
-        if (result.team >= 0) {
-          newScores[result.team] += result.points;
-          if (newScores[result.team] >= 100) { gameOver = true; winnerTeam = result.team; }
-        }
+      let newState: GameState = {
+        ...state, players: newPlayers, board: newBoard,
+        currentTurn: nextTurn,
+        leftEnd: newBoard[0].tile.left, rightEnd: newBoard[newBoard.length - 1].tile.right,
+        consecutivePasses: 0
+      };
+
+      newState = checkWin(newState, winner);
+      setGameState(newState);
+      broadcastState(newState);
+
+      if (!newState.gameOver && newState.players[nextTurn].isBot) {
+        setTimeout(() => playBotMove(newState), 1500);
+      }
+    } else {
+      const newPlayers = state.players.map((p, i) =>
+        i === botIndex ? { ...p, passed: true } : p
+      );
+      const nextTurn = (botIndex + 1) % 4;
+      const newPasses = state.consecutivePasses + 1;
+
+      let newState: GameState = {
+        ...state, players: newPlayers, currentTurn: nextTurn, consecutivePasses: newPasses
+      };
+
+      if (newPasses >= 4) {
+        newState = checkWin(newState, null);
       }
 
-      const newState = { ...state, players: newPlayers, board: newBoard, currentTurn: nextTurn, leftEnd: newBoard[0].left, rightEnd: newBoard[newBoard.length - 1].right, scores: newScores, gameOver, winnerTeam };
       setGameState(newState);
       broadcastState(newState);
 
-      if (!gameOver && newPlayers[nextTurn].isBot) setTimeout(() => playBotMove(newState), 1500);
-    } else {
-      const newState = { ...state, currentTurn: (botIndex + 1) % 4 };
-      setGameState(newState);
-      broadcastState(newState);
-      if (newState.players[newState.currentTurn].isBot) setTimeout(() => playBotMove(newState), 1500);
+      if (!newState.gameOver && newState.players[nextTurn].isBot) {
+        setTimeout(() => playBotMove(newState), 1500);
+      }
     }
   };
 
@@ -176,10 +236,20 @@ export default function Room() {
 
       <div className="table-wood w-full h-[60vh] mt-12 p-8 flex flex-col items-center justify-center relative">
         <div className="flex flex-wrap justify-center gap-1 bg-black/10 p-2 rounded max-w-3xl">
-          {gameState.board.map((tile, idx) => (
-            <TileComponent key={`${tile.id}-${idx}`} left={tile.left} right={tile.right} isHorizontal />
+          {gameState.board.map((entry, idx) => (
+            <TileComponent key={`${entry.tile.id}-${idx}`} left={entry.tile.left} right={entry.tile.right} isHorizontal />
           ))}
         </div>
+
+        {isMyTurn && myHand.every(t => {
+          const c = canPlayTile(t, gameState.leftEnd, gameState.rightEnd);
+          return !c.left && !c.right;
+        }) && (
+          <button onClick={passTurn} className="absolute top-4 left-1/2 -translate-x-1/2 bg-yellow-600 text-white px-4 py-2 rounded">
+            Pasar Turno (Trancar)
+          </button>
+        )}
+
         {gameState.gameOver && (
           <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-50">
             <h1 className="text-4xl text-yellow-400 mb-4 animate-bounce">
@@ -196,8 +266,8 @@ export default function Room() {
 
       <div className="fixed bottom-0 left-0 right-0 bg-black/60 p-4 flex justify-center gap-2 border-t-4 border-gray-800 z-20">
         {myHand.map(tile => {
-          const canPlay = canPlayTile(tile, gameState.leftEnd, gameState.rightEnd);
-          const isPlayable = isMyTurn && (canPlay.left || canPlay.right);
+          const c = canPlayTile(tile, gameState.leftEnd, gameState.rightEnd);
+          const isPlayable = isMyTurn && (c.left || c.right);
           return (
             <div key={tile.id} className="relative">
               <TileComponent
@@ -208,8 +278,8 @@ export default function Room() {
               />
               {selectedTile?.id === tile.id && (
                 <div className="absolute -top-12 left-0 right-0 flex justify-between bg-gray-900 p-1 rounded">
-                  {canPlay.left && <button onClick={() => playTile(tile, 'left')} className="bg-blue-500 text-white text-xs px-2 py-1">Izq</button>}
-                  {canPlay.right && <button onClick={() => playTile(tile, 'right')} className="bg-blue-500 text-white text-xs px-2 py-1">Der</button>}
+                  {c.left && <button onClick={() => playTile(tile, 'left')} className="bg-blue-500 text-white text-xs px-2 py-1">Izq</button>}
+                  {c.right && <button onClick={() => playTile(tile, 'right')} className="bg-blue-500 text-white text-xs px-2 py-1">Der</button>}
                 </div>
               )}
             </div>
