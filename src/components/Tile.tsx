@@ -1,8 +1,7 @@
 import React from 'react';
 
 const PIP_POSITIONS: Record<number, string[]> = {
-  0: [],
-  1: ['center'],
+  0: [], 1: ['center'],
   2: ['top-left', 'bottom-right'],
   3: ['top-left', 'center', 'bottom-right'],
   4: ['top-left', 'top-right', 'bottom-left', 'bottom-right'],
@@ -10,20 +9,24 @@ const PIP_POSITIONS: Record<number, string[]> = {
   6: ['top-left', 'top-right', 'mid-left', 'mid-right', 'bottom-left', 'bottom-right']
 };
 
-export default function Tile({ left, right, isHorizontal = false, onClick, playable }: {
-  left: number;
-  right: number;
-  isHorizontal?: boolean;
-  onClick?: () => void;
-  playable?: boolean;
+export default function Tile({ left, right, isHorizontal = false, faceDown = false, onClick, playable }: {
+  left: number; right: number; isHorizontal?: boolean; faceDown?: boolean; onClick?: () => void; playable?: boolean;
 }) {
+  if (faceDown) {
+    return (
+      <div
+        className="bg-[#1a1a1a] border-2 border-[#444] shadow-[2px_2px_0px_#000]"
+        style={{ width: isHorizontal ? '60px' : '30px', height: isHorizontal ? '30px' : '60px', imageRendering: 'pixelated' }}
+      />
+    );
+  }
+
   const renderPips = (value: number) => (
     <div className="grid grid-cols-3 grid-rows-3 w-full h-full p-1 gap-0">
       {Array.from({ length: 9 }).map((_, idx) => {
         const positions = ['top-left', 'top-center', 'top-right', 'mid-left', 'center', 'mid-right', 'bottom-left', 'bottom-center', 'bottom-right'];
-        const pos = positions[idx];
-        const hasPip = PIP_POSITIONS[value].includes(pos);
-        return <div key={idx} className="flex items-center justify-center">{hasPip && <div className="w-2 h-2 bg-gray-900 rounded-sm"></div>}</div>;
+        const hasPip = PIP_POSITIONS[value].includes(positions[idx]);
+        return <div key={idx} className="flex items-center justify-center">{hasPip && <div className="w-2 h-2 bg-[#111]"></div>}</div>;
       })}
     </div>
   );
@@ -31,16 +34,12 @@ export default function Tile({ left, right, isHorizontal = false, onClick, playa
   return (
     <div
       onClick={onClick}
-      className={`domino-tile ${isHorizontal ? 'flex-row' : 'flex-col'} ${playable ? 'ring-4 ring-green-500 cursor-pointer hover:-translate-y-2 transition-transform' : ''} bg-[#f4f1e8]`}
-      style={{ width: '40px', height: '80px', border: '2px solid #333', borderRadius: '4px', boxShadow: '2px 2px 0px rgba(0,0,0,0.4)' }}
+      className={`bg-[#f4f1e8] border-2 border-[#111] shadow-[2px_2px_0px_#000] flex ${isHorizontal ? 'flex-row w-[60px] h-[30px]' : 'flex-col w-[30px] h-[60px]'} ${playable ? 'ring-4 ring-yellow-400 cursor-pointer animate-pulse' : 'opacity-80'}`}
+      style={{ imageRendering: 'pixelated' }}
     >
-      <div className="flex-1 w-full h-full relative">
-        {renderPips(left)}
-      </div>
-      <div style={{ borderBottom: isHorizontal ? 'none' : '2px solid #333', borderRight: isHorizontal ? '2px solid #333' : 'none' }} className="absolute"></div>
-      <div className="flex-1 w-full h-full relative">
-        {renderPips(right)}
-      </div>
+      <div className="flex-1 w-full h-full relative">{renderPips(left)}</div>
+      <div className={isHorizontal ? 'w-[2px] bg-[#111] h-full' : 'h-[2px] bg-[#111] w-full'}></div>
+      <div className="flex-1 w-full h-full relative">{renderPips(right)}</div>
     </div>
   );
 }
