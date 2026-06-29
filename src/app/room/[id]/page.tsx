@@ -196,7 +196,7 @@ export default function Room() {
       </button>
       {showScores && <Scoreboard scores={gameState.scores} teamNames={["Nosotros", "Ellos"]} />}
 
-      <div className="grid grid-cols-3 grid-rows-3 h-[80vh] gap-4 mt-8">
+      <div className="grid grid-cols-3 grid-rows-[auto_1fr_auto] h-[85vh] gap-2 mt-8">
         {/* Arriba - Compañero */}
         <div className="col-span-3 row-start-1 flex flex-col items-center justify-start p-4">
           <div className="flex items-center gap-2 mb-2">
@@ -239,10 +239,10 @@ export default function Room() {
             {gameState.phase === 'dealing' ? (
               <div className="text-white animate-pulse text-center text-sm">Barajando...</div>
             ) : (
-              <div className="flex items-center overflow-x-auto max-w-full px-1 min-h-[50px]" style={{ flexFlow: 'row nowrap' }}>
+              <div className="flex items-start gap-0 overflow-x-auto max-w-full px-1 min-h-[40px]" style={{ flexFlow: 'row nowrap' }}>
                 {gameState.board.map((item, idx) => (
-                    <div key={`${item.tile.id}-${idx}`} className="flex items-center" style={{ marginLeft: idx > 0 ? '-3px' : '0' }}>
-                    <TileComponent left={item.tile.left} right={item.tile.right} isHorizontal doubleMark={item.tile.left === item.tile.right} />
+                  <div key={`${item.tile.id}-${idx}`} className="flex items-start shrink-0">
+                    <TileComponent left={item.tile.left} right={item.tile.right} isHorizontal compact doubleMark={item.tile.left === item.tile.right} />
                   </div>
                 ))}
               </div>
