@@ -12,11 +12,14 @@ const PIP_POSITIONS: Record<number, string[]> = {
 export default function Tile({ left, right, isHorizontal = false, faceDown = false, onClick, playable }: {
   left: number; right: number; isHorizontal?: boolean; faceDown?: boolean; onClick?: () => void; playable?: boolean;
 }) {
+  const tileW = isHorizontal ? 80 : 40;
+  const tileH = isHorizontal ? 40 : 80;
+
   if (faceDown) {
     return (
       <div
-        className="bg-[#1a1a1a] border-2 border-[#444] shadow-[2px_2px_0px_#000]"
-        style={{ width: isHorizontal ? '60px' : '30px', height: isHorizontal ? '30px' : '60px', imageRendering: 'pixelated' }}
+        className="bg-[#1a1a1a] border-2 border-[#444] shadow-[3px_3px_0px_#000]"
+        style={{ width: tileW + 'px', height: tileH + 'px', imageRendering: 'pixelated' }}
       />
     );
   }
@@ -26,7 +29,7 @@ export default function Tile({ left, right, isHorizontal = false, faceDown = fal
       {Array.from({ length: 9 }).map((_, idx) => {
         const positions = ['top-left', 'top-center', 'top-right', 'mid-left', 'center', 'mid-right', 'bottom-left', 'bottom-center', 'bottom-right'];
         const hasPip = PIP_POSITIONS[value].includes(positions[idx]);
-        return <div key={idx} className="flex items-center justify-center">{hasPip && <div className="w-2 h-2 bg-[#111]"></div>}</div>;
+        return <div key={idx} className="flex items-center justify-center">{hasPip && <div className="w-[6px] h-[6px] bg-[#111] shadow-[1px_1px_0px_#555]"></div>}</div>;
       })}
     </div>
   );
@@ -34,11 +37,11 @@ export default function Tile({ left, right, isHorizontal = false, faceDown = fal
   return (
     <div
       onClick={onClick}
-      className={`bg-[#f4f1e8] border-2 border-[#111] shadow-[2px_2px_0px_#000] flex ${isHorizontal ? 'flex-row w-[60px] h-[30px]' : 'flex-col w-[30px] h-[60px]'} ${playable ? 'ring-4 ring-yellow-400 cursor-pointer animate-pulse' : 'opacity-80'}`}
-      style={{ imageRendering: 'pixelated' }}
+      className={`bg-[#f4f1e8] border-[3px] border-[#111] shadow-[3px_3px_0px_#000] flex ${isHorizontal ? 'flex-row' : 'flex-col'} ${playable ? 'ring-4 ring-yellow-400 cursor-pointer animate-pulse' : ''}`}
+      style={{ width: tileW + 'px', height: tileH + 'px', imageRendering: 'pixelated' }}
     >
       <div className="flex-1 w-full h-full relative">{renderPips(left)}</div>
-      <div className={isHorizontal ? 'w-[2px] bg-[#111] h-full' : 'h-[2px] bg-[#111] w-full'}></div>
+      <div className={isHorizontal ? 'w-[3px] bg-[#111] h-full' : 'h-[3px] bg-[#111] w-full'}></div>
       <div className="flex-1 w-full h-full relative">{renderPips(right)}</div>
     </div>
   );

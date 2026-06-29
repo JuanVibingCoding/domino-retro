@@ -45,24 +45,4 @@ body {
   box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
 }
 
-.domino-tile {
-  width: 50px;
-  height: 100px;
-  background-color: var(--color-ficha);
-  border: 2px solid #333;
-  border-radius: 4px;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 2px 2px 0px rgba(0,0,0,0.4);
-}
 
-.domino-tile::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 10%;
-  right: 10%;
-  height: 2px;
-  background-color: #333;
-}

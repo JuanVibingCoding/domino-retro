@@ -193,24 +193,39 @@ export default function Room() {
       <Scoreboard scores={gameState.scores} teamNames={["Nosotros", "Ellos"]} />
 
       <div className="grid grid-cols-3 grid-rows-3 h-[80vh] gap-4 mt-8">
+        {/* Arriba - Compañero */}
         <div className="col-span-3 row-start-1 flex flex-col items-center justify-start p-4">
-          <span className={`text-white mb-2 ${gameState.currentTurn === 2 ? 'text-yellow-400 animate-pulse' : ''}`}>
-            {gameState.players[2].name} (Fichas: {gameState.players[2].hand.length})
-          </span>
+          <div className="flex items-center gap-2 mb-2">
+            <div className={`w-8 h-8 border-2 border-white shadow-[2px_2px_0px_#000] flex items-center justify-center ${gameState.players[2].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 2 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
+              <span className="text-white text-[10px] font-bold">P</span>
+            </div>
+            <span className={`text-sm font-bold tracking-wide ${gameState.currentTurn === 2 ? 'text-yellow-400' : 'text-white'}`}>
+              {gameState.players[2].name}
+            </span>
+            <span className="text-gray-300 text-[10px]">({gameState.players[2].hand.length})</span>
+          </div>
           <div className="flex gap-1">
             {gameState.players[2].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown isHorizontal />)}
           </div>
         </div>
 
+        {/* Izquierda - Rival 1 */}
         <div className="col-start-1 row-start-2 flex flex-col items-center justify-center">
+          <div className="flex flex-col items-center gap-2 mb-2">
+            <div className={`w-8 h-8 border-2 border-white shadow-[2px_2px_0px_#000] flex items-center justify-center ${gameState.players[1].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 1 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
+              <span className="text-white text-[10px] font-bold">R</span>
+            </div>
+            <span className={`text-sm font-bold tracking-wide text-center ${gameState.currentTurn === 1 ? 'text-yellow-400' : 'text-white'}`}>
+              {gameState.players[1].name}
+            </span>
+            <span className="text-gray-300 text-[10px]">({gameState.players[1].hand.length})</span>
+          </div>
           <div className="flex flex-col gap-1">
             {gameState.players[1].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown />)}
           </div>
-          <span className={`text-white mt-2 ${gameState.currentTurn === 1 ? 'text-yellow-400 animate-pulse' : ''}`}>
-            {gameState.players[1].name} ({gameState.players[1].hand.length})
-          </span>
         </div>
 
+        {/* Centro - Mesa */}
         <div className="col-start-2 row-start-2 flex items-center justify-center">
           <div className="bg-[#1e5631] border-4 border-[#5e3a1c] p-4 w-full h-full flex items-center justify-center relative shadow-[8px_8px_0px_#000]">
             {gameState.phase === 'dealing' ? (
@@ -231,10 +246,17 @@ export default function Room() {
           </div>
         </div>
 
+        {/* Derecha - Rival 2 */}
         <div className="col-start-3 row-start-2 flex flex-col items-center justify-center">
-          <span className={`text-white mb-2 ${gameState.currentTurn === 3 ? 'text-yellow-400 animate-pulse' : ''}`}>
-            {gameState.players[3].name} ({gameState.players[3].hand.length})
-          </span>
+          <div className="flex flex-col items-center gap-2 mb-2">
+            <div className={`w-8 h-8 border-2 border-white shadow-[2px_2px_0px_#000] flex items-center justify-center ${gameState.players[3].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 3 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
+              <span className="text-white text-[10px] font-bold">R</span>
+            </div>
+            <span className={`text-sm font-bold tracking-wide text-center ${gameState.currentTurn === 3 ? 'text-yellow-400' : 'text-white'}`}>
+              {gameState.players[3].name}
+            </span>
+            <span className="text-gray-300 text-[10px]">({gameState.players[3].hand.length})</span>
+          </div>
           <div className="flex flex-col gap-1">
             {gameState.players[3].hand.map((t, i) => <TileComponent key={i} left={0} right={0} faceDown />)}
           </div>
@@ -244,6 +266,14 @@ export default function Room() {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-[#111] p-4 border-t-4 border-[#5e3a1c] z-20">
+        <div className="flex items-center justify-center gap-2 mb-1">
+          <div className={`w-6 h-6 border border-white shadow-[1px_1px_0px_#000] flex items-center justify-center ${gameState.players[0].team === 0 ? 'bg-blue-600' : 'bg-red-600'}`}>
+            <span className="text-white text-[8px] font-bold">T</span>
+          </div>
+          <span className={`text-xs font-bold ${gameState.currentTurn === 0 ? 'text-yellow-400' : 'text-gray-300'}`}>
+            {gameState.players[0].name}
+          </span>
+        </div>
         <div className="flex justify-center gap-2 mb-2">
           {myHand.map(tile => {
             const c = canPlayTile(tile, gameState.leftEnd, gameState.rightEnd);
