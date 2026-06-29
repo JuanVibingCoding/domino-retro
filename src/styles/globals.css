@@ -1,0 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Permanent+Marker&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-cemento: #d5cdba;
+  --color-tierra: #b8a690;
+  --color-madera: #8b5a2b;
+  --color-madera-oscura: #5e3a1c;
+  --color-ficha: #f4f1e8;
+}
+
+body {
+  font-family: 'Press Start 2P', cursive;
+  background-color: var(--color-cemento);
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(0,0,0,0.1) 1px, transparent 1px),
+    linear-gradient(135deg, var(--color-cemento) 0%, var(--color-tierra) 100%);
+  background-size: 20px 20px, 100% 100%;
+  image-rendering: pixelated;
+}
+
+.text-handwritten {
+  font-family: 'Permanent Marker', cursive;
+}
+
+.table-wood {
+  background-color: var(--color-madera);
+  background-image:
+    repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(0,0,0,0.1) 10px, rgba(0,0,0,0.1) 11px),
+    linear-gradient(180deg, var(--color-madera) 0%, var(--color-madera-oscura) 100%);
+  border: 8px solid var(--color-madera-oscura);
+  box-shadow: inset 0 0 50px rgba(0,0,0,0.5), 0 0 20px rgba(0,0,0,0.3);
+  border-radius: 10px;
+}
+
+.scorebook {
+  background-color: #fdfdfd;
+  background-image:
+    linear-gradient(#e4e4e4 1px, transparent 1px);
+  background-size: 100% 25px;
+  border-left: 4px solid rgba(255, 0, 0, 0.2);
+  box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
+}
+
+.domino-tile {
+  width: 50px;
+  height: 100px;
+  background-color: var(--color-ficha);
+  border: 2px solid #333;
+  border-radius: 4px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.4);
+}
+
+.domino-tile::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background-color: #333;
+}
