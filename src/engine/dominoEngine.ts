@@ -24,8 +24,10 @@ export interface GameState {
   gameOver: boolean;
   winnerTeam: number | null;
   log: string[];
-  phase: 'dealing' | 'playing' | 'gameOver';
+  phase: 'dealing' | 'playing' | 'roundOver' | 'gameOver';
   consecutivePasses: number;
+  lastPlayerToPlay: number | null;
+  roundStarter: number;
 }
 
 export function generateDeck(): Tile[] {
@@ -60,27 +62,6 @@ export function canPlayTile(tile: Tile, leftEnd: number | null, rightEnd: number
   };
 }
 
-export function calculateHandScore(players: GameState['players']): number {
-  return players.reduce((total, player) => {
-    return total + player.hand.reduce((handTotal, tile) => handTotal + tile.left + tile.right, 0);
-  }, 0);
-}
-
-export function calculateVenezuelanScore(state: GameState, winnerIndex: number | null): { team: number, points: number } {
-  const team0Points = state.players.filter(p => p.team === 0).reduce((sum, p) => sum + p.hand.reduce((s, t) => s + t.left + t.right, 0), 0);
-  const team1Points = state.players.filter(p => p.team === 1).reduce((sum, p) => sum + p.hand.reduce((s, t) => s + t.left + t.right, 0), 0);
-
-  if (winnerIndex !== null) {
-    const winningTeam = state.players[winnerIndex].team;
-    const losingTeamPoints = winningTeam === 0 ? team1Points : team0Points;
-    return { team: winningTeam, points: losingTeamPoints };
-  } else {
-    if (team0Points < team1Points) return { team: 0, points: team1Points - team0Points };
-    else if (team1Points < team0Points) return { team: 1, points: team0Points - team1Points };
-    else return { team: -1, points: 0 };
-  }
-}
-
 export function getOrientedTile(tile: Tile, side: 'left' | 'right', leftEnd: number | null, rightEnd: number | null): Tile {
   if (side === 'left') {
     if (tile.right === leftEnd) return tile;
@@ -90,4 +71,77 @@ export function getOrientedTile(tile: Tile, side: 'left' | 'right', leftEnd: num
     if (tile.right === rightEnd) return { ...tile, left: tile.right, right: tile.left };
   }
   return tile;
+}
+
+export function findSixDoubleOwner(players: Player[]): number {
+  return players.findIndex(p => p.hand.some(t => t.id === '6-6'));
+}
+
+export function getNextTurn(currentIndex: number, playerCount: number): number {
+  return (currentIndex + 3) % playerCount;
+}
+
+export function calculateTotalHandPoints(players: Player[]): number {
+  return players.reduce((sum, p) => sum + p.hand.reduce((s, t) => s + t.left + t.right, 0), 0);
+}
+
+export function calculateTeamPoints(players: Player[], team: number): number {
+  return players.filter(p => p.team === team).reduce((sum, p) => sum + p.hand.reduce((s, t) => s + t.left + t.right, 0), 0);
+}
+
+export function calculateTotalPips(players: Player[]): number {
+  return players.reduce((sum, p) => sum + p.hand.reduce((s, t) => s + t.left + t.right, 0), 0);
+}
+
+export function isTrancado(players: Player[], leftEnd: number | null, rightEnd: number | null): boolean {
+  return players.every(p => !p.hand.some(t => {
+    const c = canPlayTile(t, leftEnd, rightEnd);
+    return c.left || c.right;
+  }));
+}
+
+export interface RoundResult {
+  winnerTeam: number;
+  points: number;
+}
+
+export function resolveRound(players: Player[], winnerPlayerIndex: number | null, lastPlayerToPlay: number | null): RoundResult {
+  const team0Points = calculateTeamPoints(players, 0);
+  const team1Points = calculateTeamPoints(players, 1);
+  const totalPoints = calculateTotalPips(players);
+
+  if (winnerPlayerIndex !== null) {
+    return { winnerTeam: players[winnerPlayerIndex].team, points: totalPoints };
+  }
+
+  if (team0Points < team1Points) return { winnerTeam: 0, points: totalPoints };
+  if (team1Points < team0Points) return { winnerTeam: 1, points: totalPoints };
+
+  if (lastPlayerToPlay !== null) {
+    return { winnerTeam: players[lastPlayerToPlay].team, points: totalPoints };
+  }
+  return { winnerTeam: 0, points: totalPoints };
+}
+
+export function createNewRound(players: Player[], roundStarter: number): GameState {
+  const deck = shuffleDeck(generateDeck());
+  const { hands } = dealHands(deck, 4);
+  const newPlayers = players.map((p, i) => ({ ...p, hand: hands[i], passed: false }));
+
+  return {
+    players: newPlayers,
+    board: [],
+    currentTurn: roundStarter,
+    boneyard: [],
+    leftEnd: null,
+    rightEnd: null,
+    scores: [0, 0],
+    gameOver: false,
+    winnerTeam: null,
+    log: ['Nueva mano...'],
+    phase: 'playing',
+    consecutivePasses: 0,
+    lastPlayerToPlay: null,
+    roundStarter,
+  };
 }

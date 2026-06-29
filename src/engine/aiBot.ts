@@ -4,19 +4,20 @@ export function getBotMove(hand: Tile[], leftEnd: number | null, rightEnd: numbe
   const playableTiles = hand.map(tile => {
     const canPlay = canPlayTile(tile, leftEnd, rightEnd);
     if (canPlay.left || canPlay.right) {
-      return { tile, side: canPlay.left ? 'left' : 'right', value: tile.left + tile.right };
+      const sides: ('left' | 'right')[] = [];
+      if (canPlay.left) sides.push('left');
+      if (canPlay.right) sides.push('right');
+      return { tile, sides, value: tile.left + tile.right };
     }
     return null;
-  }).filter(Boolean) as { tile: Tile, side: 'left' | 'right', value: number }[];
+  }).filter(Boolean) as { tile: Tile, sides: ('left' | 'right')[], value: number }[];
 
   if (playableTiles.length === 0) return null;
 
   playableTiles.sort((a, b) => b.value - a.value);
 
-  if (Math.random() > 0.2) {
-    return { tile: playableTiles[0].tile, side: playableTiles[0].side };
-  } else {
-    const randomChoice = playableTiles[Math.floor(Math.random() * playableTiles.length)];
-    return { tile: randomChoice.tile, side: randomChoice.side };
-  }
+  const selected = playableTiles[0];
+  const side = selected.sides[0];
+
+  return { tile: selected.tile, side };
 }
