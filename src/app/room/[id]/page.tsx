@@ -1,348 +1,188 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { useParams } from 'next/navigation';
-import Peer, { DataConnection } from 'peerjs';
-import {
-  generateDeck, shuffleDeck, dealHands, GameState, Tile, canPlayTile,
-  getOrientedTile, findSixDoubleOwner, getNextTurn, resolveRound,
-  isTrancado, createNewRound, calculateTotalPips, calculateTeamPoints,
-} from '@/engine/dominoEngine';
-import { getBotMove } from '@/engine/aiBot';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { usePeerRoom } from '@/multi/usePeerRoom';
+import { Tile } from '@/engine/types';
+import { getValidMoves } from '@/engine/dominoEngine';
 import Scoreboard from '@/components/Scoreboard';
+import Board from '@/components/Board';
 import TileComponent from '@/components/Tile';
+import Avatar from '@/components/Avatar';
+import CRTOverlay from '@/components/CRTOverlay';
+import VictoryScreen from '@/components/VictoryScreen';
 import { useSound } from '@/hooks/useSound';
 
 export default function Room() {
-  const params = useParams();
-  const roomId = params.id as string;
-  const { playClick, playPass, playTranque } = useSound();
+  const searchParams = useSearchParams();
+  const roomId = typeof window !== 'undefined'
+    ? window.location.pathname.split('/room/')[1] || ''
+    : '';
+  const initialName = searchParams.get('name') || '';
 
-  const [peer, setPeer] = useState<Peer | null>(null);
-  const [connections, setConnections] = useState<DataConnection[]>([]);
-  const [isHost, setIsHost] = useState(false);
+  const { playClick, playPass, playTranque, playVictory, playDefeat } = useSound();
+  const lastLogRef = useRef<string>('');
 
-  const [gameState, setGameState] = useState<GameState | null>(null);
-  const [myName, setMyName] = useState('');
-  const [myPlayerIndex, setMyPlayerIndex] = useState(0);
-  const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const [myName, setMyName] = useState(initialName);
   const [showScores, setShowScores] = useState(true);
-  const [handShaking, setHandShaking] = useState(false);
-  const boardRef = useRef<HTMLDivElement>(null);
-  const [boardWidth, setBoardWidth] = useState(400);
+  const [nameInput, setNameInput] = useState('');
+  const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+
+  const {
+    isHost, gameState, lobby, playerIndex: myPlayerIndex,
+    sendAction, startGame,
+  } = usePeerRoom(roomId, myName);
+
+  const myHand = useMemo(
+    () => gameState?.players[myPlayerIndex]?.hand ?? [],
+    [gameState, myPlayerIndex]
+  );
+
+  const isMyTurn = gameState?.currentTurn === myPlayerIndex && gameState?.phase === 'playing';
+
+  const playableMoves = useMemo(() => {
+    if (!gameState || !isMyTurn) return [];
+    const isFirstMove = gameState.board.length === 0 && gameState.roundStarter === myPlayerIndex;
+    const mustPlayDouble = isFirstMove && gameState.roundNumber === 1;
+    return getValidMoves(myHand, gameState.leftEnd, gameState.rightEnd, {
+      isFirstMoveOfRound: mustPlayDouble,
+    });
+  }, [gameState, isMyTurn, myHand, myPlayerIndex]);
+
+  const canPlayAny = playableMoves.length > 0;
 
   useEffect(() => {
-    const el = boardRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver(entries => {
-      setBoardWidth(entries[0].contentRect.width);
-    });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const newPeer = new Peer(roomId);
-    newPeer.on('open', (id) => setIsHost(id === roomId));
-    newPeer.on('connection', (conn) => {
-      setConnections(prev => [...prev, conn]);
-      conn.on('data', (data: any) => data.type === 'STATE_UPDATE' && setGameState(data.payload));
-    });
-    setPeer(newPeer);
-    return () => { newPeer.destroy(); };
-  }, [roomId]);
-
-  const broadcastState = useCallback((state: GameState) => {
-    connections.forEach(conn => conn.send({ type: 'STATE_UPDATE', payload: state }));
-  }, [connections]);
-
-  const startNewHand = useCallback((prevState: GameState, nextRoundStarter: number) => {
-    const deck = shuffleDeck(generateDeck());
-    const { hands } = dealHands(deck, 4);
-    const newPlayers = prevState.players.map((p, i) => ({
-      ...p, hand: hands[i], passed: false,
-    }));
-
-    const firstTurn = nextRoundStarter;
-    const log = prevState.log.slice();
-    log.push(`Nueva mano — repartiendo fichas...`);
-
-    const newState: GameState = {
-      ...prevState,
-      players: newPlayers,
-      board: [],
-      currentTurn: firstTurn,
-      boneyard: [],
-      leftEnd: null,
-      rightEnd: null,
-      log,
-      phase: 'playing',
-      consecutivePasses: 0,
-      lastPlayerToPlay: null,
-      roundStarter: firstTurn,
-    };
-
-    setGameState(newState);
-    broadcastState(newState);
-    setSelectedTile(null);
-    setHandShaking(false);
-    return newState;
-  }, [broadcastState]);
-
-  const startGame = useCallback(() => {
-    const deck = shuffleDeck(generateDeck());
-    const { hands, boneyard } = dealHands(deck, 4);
-
-    const players = [
-      { id: 'host', name: myName || 'Tú', isBot: false, hand: hands[0], team: 0 as const, passed: false },
-      { id: 'bot-1', name: 'CPU 1 (Rival)', isBot: true, hand: hands[1], team: 1 as const, passed: false },
-      { id: 'bot-2', name: 'CPU 2 (Pareja)', isBot: true, hand: hands[2], team: 0 as const, passed: false },
-      { id: 'bot-3', name: 'CPU 3 (Rival)', isBot: true, hand: hands[3], team: 1 as const, passed: false },
-    ];
-
-    const sixSixOwner = findSixDoubleOwner(players);
-    const firstStarter = sixSixOwner !== -1 ? sixSixOwner : 0;
-
-    const initialState: GameState = {
-      players,
-      board: [],
-      currentTurn: firstStarter,
-      boneyard,
-      leftEnd: null,
-      rightEnd: null,
-      scores: [0, 0],
-      gameOver: false,
-      winnerTeam: null,
-      log: ['¡Partida iniciada! Buscando el 6-6...'],
-      phase: 'dealing',
-      consecutivePasses: 0,
-      lastPlayerToPlay: null,
-      roundStarter: firstStarter,
-    };
-
-    setGameState(initialState);
-    broadcastState(initialState);
-
-    setTimeout(() => {
-      const starterName = players[firstStarter].name;
-      const logMsg = sixSixOwner !== -1
-        ? `${starterName} tiene la cochina (6-6). ¡Empieza!`
-        : `${starterName} empieza la primera ronda.`;
-      const playingState = {
-        ...initialState,
-        phase: 'playing' as const,
-        log: [logMsg],
-      };
-      setGameState(playingState);
-      broadcastState(playingState);
-
-      if (players[firstStarter].isBot) {
-        setTimeout(() => playBotMove(playingState), 1500);
+    if (!gameState || gameState.log.length === 0) return;
+    const lastMsg = gameState.log[gameState.log.length - 1];
+    if (lastMsg !== lastLogRef.current) {
+      lastLogRef.current = lastMsg;
+      if (lastMsg.includes('Trancado')) {
+        playTranque();
       }
-    }, 1500);
-  }, [myName, broadcastState]);
-
-  const endRound = useCallback((state: GameState, winnerPlayerIndex: number | null) => {
-    const result = resolveRound(state.players, winnerPlayerIndex, state.lastPlayerToPlay);
-    const newScores: [number, number] = [...state.scores];
-    newScores[result.winnerTeam] += result.points;
-    const isZapato = result.winnerTeam === 0 ? newScores[1] === 0 : newScores[0] === 0;
-    const reachedGoal = newScores[result.winnerTeam] >= 100;
-    const newLog = [...state.log];
-    newLog.push(`${result.winnerTeam === 0 ? 'Nosotros' : 'Ellos'} ganaron la ronda — ${result.points} pts.`);
-
-    if (reachedGoal) {
-      if (isZapato) {
-        newLog.push(`¡ZAPATO! ${result.winnerTeam === 0 ? 'Nosotros' : 'Ellos'} barrieron la mesa.`);
-      }
-      const finalState: GameState = {
-        ...state,
-        scores: newScores,
-        log: newLog,
-        gameOver: true,
-        winnerTeam: result.winnerTeam,
-        phase: 'gameOver',
-      };
-      setGameState(finalState);
-      broadcastState(finalState);
-      return;
     }
+  }, [gameState, playTranque]);
 
-    const nextStarter = getNextTurn(state.roundStarter, 4);
-    const transitionState: GameState = {
-      ...state,
-      scores: newScores,
-      log: newLog,
-      phase: 'roundOver',
-    };
-    setGameState(transitionState);
-    broadcastState(transitionState);
+  useEffect(() => {
+    if (!gameState || !gameState.gameOver) return;
+    const myTeam = gameState.players[myPlayerIndex]?.team ?? 0;
+    if (gameState.winnerTeam === myTeam) {
+      playVictory();
+    } else {
+      playDefeat();
+    }
+  }, [gameState, myPlayerIndex, playVictory, playDefeat]);
 
-    setTimeout(() => {
-      startNewHand(transitionState, nextStarter);
-    }, 2500);
-  }, [broadcastState, startNewHand]);
+  const handleTileClick = useCallback((tile: Tile) => {
+    if (!gameState || !isMyTurn) return;
+    const tileMoves = playableMoves.filter(m => m.tile.id === tile.id);
+
+    if (tileMoves.length === 1) {
+      playClick();
+      sendAction({ type: 'PLAY', playerIndex: myPlayerIndex, tile, side: tileMoves[0].side });
+      setSelectedTile(null);
+    } else if (tileMoves.length === 2) {
+      setSelectedTile(tile);
+    }
+  }, [gameState, isMyTurn, playableMoves, myPlayerIndex, sendAction, playClick]);
+
+  const handleSideChoice = useCallback((tile: Tile, side: 'left' | 'right') => {
+    if (!gameState) return;
+    playClick();
+    sendAction({ type: 'PLAY', playerIndex: myPlayerIndex, tile, side });
+    setSelectedTile(null);
+  }, [gameState, myPlayerIndex, sendAction, playClick]);
 
   const handlePass = useCallback(() => {
-    if (!gameState || gameState.currentTurn !== myPlayerIndex) return;
-    performPass(myPlayerIndex, gameState);
-  }, [gameState, myPlayerIndex]);
-
-  const performPass = useCallback((playerIndex: number, state: GameState) => {
+    if (!gameState || !isMyTurn) return;
     playPass();
-
-    const newPlayers = state.players.map((p, i) =>
-      i === playerIndex ? { ...p, passed: true } : p
-    );
-    const newPasses = state.consecutivePasses + 1;
-    const nextTurn = getNextTurn(playerIndex, 4);
-    const log = [...state.log, `${state.players[playerIndex].name} pasó.`];
-
-    if (newPasses >= 4 || isTrancado(newPlayers, state.leftEnd, state.rightEnd)) {
-      playTranque();
-      log.push(`¡Trancado! Nadie puede jugar.`);
-      const passState: GameState = {
-        ...state,
-        players: newPlayers,
-        log,
-        consecutivePasses: newPasses,
-        currentTurn: nextTurn,
-      };
-      setGameState(passState);
-      broadcastState(passState);
-      endRound(passState, null);
-      return;
-    }
-
-    const newState: GameState = {
-      ...state,
-      players: newPlayers,
-      currentTurn: nextTurn,
-      consecutivePasses: newPasses,
-      log,
-    };
-    setGameState(newState);
-    broadcastState(newState);
-
-    if (newState.players[nextTurn].isBot) {
-      setTimeout(() => playBotMove(newState), 1500);
-    }
-  }, [broadcastState, endRound, playPass, playTranque]);
-
-  const playTile = useCallback((tile: Tile, side: 'left' | 'right') => {
-    if (!gameState || gameState.currentTurn !== myPlayerIndex) return;
-    performPlay(myPlayerIndex, tile, side, gameState);
-  }, [gameState, myPlayerIndex]);
-
-  const performPlay = useCallback((playerIndex: number, tile: Tile, side: 'left' | 'right', state: GameState) => {
-    const player = state.players[playerIndex];
-    const validTile = player.hand.find(t => t.id === tile.id);
-    if (!validTile) return null;
-
-    const canPlay = canPlayTile(validTile, state.leftEnd, state.rightEnd);
-    if (!((side === 'left' && canPlay.left) || (side === 'right' && canPlay.right))) return null;
-
-    playClick();
-
-    const orientedTile = getOrientedTile(validTile, side, state.leftEnd, state.rightEnd);
-    const newPlayers = state.players.map((p, i) =>
-      i === playerIndex
-        ? { ...p, hand: p.hand.filter(t => t.id !== validTile.id), passed: false }
-        : p
-    );
-
-    const newBoard = [...state.board];
-    const isDouble = orientedTile.left === orientedTile.right;
-    if (side === 'left') newBoard.unshift({ tile: orientedTile, isHorizontal: !isDouble });
-    else newBoard.push({ tile: orientedTile, isHorizontal: !isDouble });
-
-    const nextTurn = getNextTurn(playerIndex, 4);
-    const log = [...state.log, `${player.name} jugó [${validTile.left}|${validTile.right}]`];
-
-    const newState: GameState = {
-      ...state,
-      players: newPlayers,
-      board: newBoard,
-      currentTurn: nextTurn,
-      leftEnd: newBoard[0].tile.left,
-      rightEnd: newBoard[newBoard.length - 1].tile.right,
-      log,
-      consecutivePasses: 0,
-      lastPlayerToPlay: playerIndex,
-    };
-
-    setGameState(newState);
-    broadcastState(newState);
-    setSelectedTile(null);
-
-    if (newPlayers[playerIndex].hand.length === 0) {
-      log.push(`¡${player.name} se fue!`);
-      const dominadaState = { ...newState, log };
-      setGameState(dominadaState);
-      broadcastState(dominadaState);
-      endRound(dominadaState, playerIndex);
-      return newState;
-    }
-
-    if (newPlayers[nextTurn].isBot) {
-      setTimeout(() => playBotMove(newState), 1500);
-    }
-
-    return newState;
-  }, [broadcastState, endRound, playClick]);
-
-  const playBotMove = useCallback((state: GameState) => {
-    const botIndex = state.currentTurn;
-    const bot = state.players[botIndex];
-    const move = getBotMove(bot.hand, state.leftEnd, state.rightEnd);
-
-    if (move) {
-      performPlay(botIndex, move.tile, move.side, state);
-    } else {
-      performPass(botIndex, state);
-    }
-  }, [performPlay, performPass]);
+    sendAction({ type: 'PASS', playerIndex: myPlayerIndex });
+  }, [gameState, isMyTurn, myPlayerIndex, sendAction, playPass]);
 
   const handleRevancha = useCallback(() => {
+    if (!isHost) return;
     startGame();
-  }, [startGame]);
+  }, [isHost, startGame]);
 
-  if (!gameState) {
+  const handleSetName = useCallback(() => {
+    if (nameInput.trim()) {
+      setMyName(nameInput.trim());
+    }
+  }, [nameInput]);
+
+  if (!myName) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-[#d5cdba]">
-        <h1 className="text-xl text-gray-800 font-mono">Sala de Espera: {roomId}</h1>
-        <input type="text" placeholder="Tu nombre" value={myName} onChange={(e) => setMyName(e.target.value)} className="p-2 text-base border-4 border-gray-800 bg-white font-mono" />
-        <button onClick={startGame} className="bg-green-700 text-white px-6 py-3 border-b-4 border-green-900 active:border-b-0 mt-4 font-mono">¡Empezar Partida!</button>
+      <div className="flex flex-col items-center justify-center min-h-screen gap-6 px-4" style={{ height: '100dvh' }}>
+        <h1 className="font-pixel text-xl text-retro-amarillo" style={{ textShadow: '3px 3px 0 #111' }}>
+          DOMINO RETRO
+        </h1>
+        <p className="font-handwritten text-lg text-white/60">Sala: {roomId}</p>
+        <input
+          type="text"
+          placeholder="Tu nombre"
+          value={nameInput}
+          onChange={(e) => setNameInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSetName()}
+          className="w-full max-w-xs p-3 text-sm font-pixel text-center"
+          style={{ borderWidth: '3px', borderColor: '#111', boxShadow: '4px 4px 0px #111' }}
+        />
+        <button onClick={handleSetName} className="pixel-btn bg-retro-verde text-white px-8 py-3 font-pixel text-sm" style={{ backgroundColor: '#2d6b3f' }}>
+          Unirse
+        </button>
       </div>
     );
   }
 
-  const myHand = gameState.players[myPlayerIndex].hand;
-  const isMyTurn = gameState.currentTurn === myPlayerIndex;
-  const canPlayAny = myHand.some(t => {
-    const c = canPlayTile(t, gameState.leftEnd, gameState.rightEnd);
-    return c.left || c.right;
-  });
+  if (!gameState) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-6 px-4" style={{ height: '100dvh' }}>
+        <h1 className="font-pixel text-xl text-retro-amarillo" style={{ textShadow: '3px 3px 0 #111' }}>
+          DOMINO RETRO
+        </h1>
+        <p className="font-handwritten text-lg text-white/60">Sala: {roomId}</p>
+
+        {isHost ? (
+          <>
+            <div className="flex flex-col gap-2 w-full max-w-xs">
+              {lobby.map((slot, i) => (
+                <div key={i} className="flex items-center gap-2 p-2" style={{ borderWidth: '2px', borderColor: '#555', borderStyle: 'solid' }}>
+                  <Avatar seat={i as 0 | 1 | 2 | 3} team={i % 2 === 0 ? 0 : 1} size={32} />
+                  <span className="font-pixel text-xs text-white">{slot.name}</span>
+                  {slot.isBot && <span className="font-pixel text-[10px] text-white/40 ml-auto">CPU</span>}
+                </div>
+              ))}
+            </div>
+            <button onClick={startGame} className="pixel-btn bg-retro-verde text-white px-8 py-3 font-pixel text-sm" style={{ backgroundColor: '#2d6b3f' }}>
+              ¡Empezar Partida!
+            </button>
+          </>
+        ) : (
+          <div className="text-center">
+            <p className="text-white/50 text-xs font-pixel animate-pulse">Esperando al anfitrión...</p>
+            <p className="text-white/30 text-[10px] font-pixel mt-2">{lobby.length}/4 jugadores</p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#b8a690] relative font-mono overflow-hidden flex flex-col" style={{ height: '100dvh' }}>
-      <button onClick={() => setShowScores(!showScores)} className="absolute top-2 right-2 z-20 bg-gray-800 text-white text-[10px] px-2 py-1 border-2 border-white shadow-[2px_2px_0px_#000]">
+    <div className="min-h-screen bg-[#b8a690] relative font-pixel overflow-hidden flex flex-col" style={{ height: '100dvh' }}>
+      <button
+        onClick={() => setShowScores(!showScores)}
+        className="absolute top-2 right-2 z-20 pixel-btn bg-gray-800 text-white text-[10px] px-2 py-1"
+      >
         {showScores ? '✕' : 'Pts'}
       </button>
       {showScores && <Scoreboard scores={gameState.scores} teamNames={["Nosotros", "Ellos"]} />}
 
       {/* Top - Partner (Player 2) */}
-      <div className="flex flex-col items-center py-2 shrink-0">
+      <div className="flex flex-col items-center py-1 shrink-0">
         <div className="flex items-center gap-2 mb-1">
-          <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden ${gameState.players[2].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 2 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
-            <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
-            <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
-          </div>
-          <span className={`text-sm font-bold tracking-wide ${gameState.currentTurn === 2 ? 'text-yellow-400' : 'text-white'}`}>
+          <Avatar seat={2} team={gameState.players[2].team} isActive={gameState.currentTurn === 2} />
+          <span className={`text-xs font-bold tracking-wide ${gameState.currentTurn === 2 ? 'text-yellow-400' : 'text-white'}`} style={{ textShadow: '1px 1px 0 #111' }}>
             {gameState.players[2].name}
           </span>
-          <span className="text-gray-300 text-[10px]">({gameState.players[2].hand.length})</span>
+          <span className="text-white/40 text-[10px]">({gameState.players[2].hand.length})</span>
         </div>
         <div className="flex gap-[2px]">
           {Array.from({ length: gameState.players[2].hand.length }).map((_, i) => (
@@ -352,19 +192,15 @@ export default function Room() {
       </div>
 
       {/* Middle: Rivals + Board */}
-      <div className="flex-1 flex items-stretch min-h-0 px-2">
+      <div className="flex-1 flex items-stretch min-h-0 px-1">
         {/* Left rival (Player 1) */}
         <div className="flex flex-col items-center justify-center shrink-0 px-1">
-          <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden mb-2 ${gameState.players[1].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 1 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
-            <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
-            <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
-          </div>
-          <span className={`text-sm font-bold tracking-wide text-center mb-2 ${gameState.currentTurn === 1 ? 'text-yellow-400' : 'text-white'}`}>
+          <Avatar seat={1} team={gameState.players[1].team} isActive={gameState.currentTurn === 1} />
+          <span className={`text-[10px] font-bold tracking-wide text-center my-1 ${gameState.currentTurn === 1 ? 'text-yellow-400' : 'text-white'}`} style={{ textShadow: '1px 1px 0 #111' }}>
             {gameState.players[1].name}
           </span>
-          <span className="text-gray-300 text-[10px] mb-1">({gameState.players[1].hand.length})</span>
-          <div className="flex flex-col gap-[2px]">
+          <span className="text-white/40 text-[8px] mb-1">({gameState.players[1].hand.length})</span>
+          <div className="flex flex-col gap-[1px]">
             {Array.from({ length: gameState.players[1].hand.length }).map((_, i) => (
               <TileComponent key={i} left={0} right={0} faceDown tiny />
             ))}
@@ -372,58 +208,28 @@ export default function Room() {
         </div>
 
         {/* Board */}
-        <div className="flex-1 flex items-center justify-center px-2">
-          <div className="bg-[#1e5631] border-4 border-[#5e3a1c] w-full h-full flex items-center justify-center relative shadow-[8px_8px_0px_#000]" style={{ minHeight: '60px' }}>
+        <div className="flex-1 flex items-center justify-center px-1">
+          <div className="w-full h-full relative" style={{ minHeight: '60px' }}>
             {gameState.phase === 'dealing' || gameState.phase === 'roundOver' ? (
-              <div className="text-white animate-pulse text-center text-sm">
-                {gameState.phase === 'roundOver' ? '¡Ronda terminada!' : 'Barajando...'}
+              <div className="absolute inset-0 flex items-center justify-center board-wood rounded-lg">
+                <div className="text-white animate-pulse text-center text-xs font-pixel">
+                  {gameState.phase === 'roundOver' ? '¡Ronda terminada!' : 'Barajando...'}
+                </div>
               </div>
             ) : (
-              <div ref={boardRef} className="flex flex-col items-center overflow-y-auto w-full h-full px-2 py-1">
-                {gameState.board.length === 0 ? (
-                  <span className="text-white/40 text-xs mx-auto mt-auto mb-auto">Juega tu primera ficha</span>
-                ) : (() => {
-                  const TILE_W = 64;
-                  const perRow = Math.max(1, Math.floor(boardWidth / TILE_W));
-                  const rows: (typeof gameState.board)[] = [];
-                  for (let i = 0; i < gameState.board.length; i += perRow) {
-                    rows.push(gameState.board.slice(i, i + perRow));
-                  }
-                  return (
-                    <div className="flex flex-col gap-[2px] m-auto items-center">
-                      {rows.map((row, ri) => (
-                        <div key={ri} className="flex" style={{ flexDirection: ri % 2 === 0 ? 'row' : 'row-reverse' }}>
-                          {row.map((item, idx) => (
-                            <TileComponent key={`${item.tile.id}-${ri}-${idx}`} left={item.tile.left} right={item.tile.right} compact doubleMark={item.tile.left === item.tile.right} isHorizontal={item.isHorizontal} />
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-            {gameState.log.length > 0 && (
-              <div className="absolute bottom-1 left-2 right-2 bg-black/80 text-white text-[10px] p-1 text-center truncate">
-                {gameState.log[gameState.log.length - 1]}
-              </div>
+              <Board board={gameState.board} isMyTurn={isMyTurn} />
             )}
           </div>
         </div>
 
         {/* Right rival (Player 3) */}
         <div className="flex flex-col items-center justify-center shrink-0 px-1">
-          <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden mb-2 ${gameState.players[3].team === 0 ? 'bg-blue-600' : 'bg-red-600'} ${gameState.currentTurn === 3 ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}>
-            <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
-            <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
-          </div>
-          <span className={`text-sm font-bold tracking-wide text-center mb-2 ${gameState.currentTurn === 3 ? 'text-yellow-400' : 'text-white'}`}>
+          <Avatar seat={3} team={gameState.players[3].team} isActive={gameState.currentTurn === 3} />
+          <span className={`text-[10px] font-bold tracking-wide text-center my-1 ${gameState.currentTurn === 3 ? 'text-yellow-400' : 'text-white'}`} style={{ textShadow: '1px 1px 0 #111' }}>
             {gameState.players[3].name}
           </span>
-          <span className="text-gray-300 text-[10px] mb-1">({gameState.players[3].hand.length})</span>
-          <div className="flex flex-col gap-[2px]">
+          <span className="text-white/40 text-[8px] mb-1">({gameState.players[3].hand.length})</span>
+          <div className="flex flex-col gap-[1px]">
             {Array.from({ length: gameState.players[3].hand.length }).map((_, i) => (
               <TileComponent key={i} left={0} right={0} faceDown tiny />
             ))}
@@ -432,32 +238,28 @@ export default function Room() {
       </div>
 
       {/* Bottom - Human hand */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#111] p-4 border-t-4 border-[#5e3a1c] z-20">
+      <div className="hand-area p-3 z-20 shrink-0">
         <div className="flex items-center justify-center gap-2 mb-1">
-          <div className={`w-10 h-10 border-2 border-white shadow-[2px_2px_0px_#000] relative overflow-hidden ${gameState.players[0].team === 0 ? 'bg-blue-600' : 'bg-red-600'}`}>
-            <div className="absolute top-1.5 left-2 w-1.5 h-1.5 bg-white"></div>
-            <div className="absolute top-1.5 right-2 w-1.5 h-1.5 bg-white"></div>
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3 h-1 bg-white"></div>
-          </div>
-          <span className={`text-sm font-bold ${gameState.currentTurn === 0 ? 'text-yellow-400' : 'text-gray-300'}`}>
+          <Avatar seat={0} team={gameState.players[0].team} isActive={gameState.currentTurn === 0} />
+          <span className={`text-xs font-bold ${gameState.currentTurn === 0 ? 'text-yellow-400' : 'text-gray-300'}`} style={{ textShadow: '1px 1px 0 #111' }}>
             {gameState.players[0].name}
           </span>
         </div>
-        <div className="flex justify-center gap-2 mb-2">
+        <div className="flex justify-center gap-1.5 mb-2 flex-wrap">
           {myHand.map(tile => {
-            const c = canPlayTile(tile, gameState.leftEnd, gameState.rightEnd);
-            const isPlayable = isMyTurn && (c.left || c.right);
+            const isPlayable = isMyTurn && playableMoves.some(m => m.tile.id === tile.id);
             return (
               <div key={tile.id} className="relative">
                 <TileComponent
-                  left={tile.left} right={tile.right}
+                  left={tile.left}
+                  right={tile.right}
                   playable={isPlayable}
-                  onClick={() => isPlayable && setSelectedTile(tile)}
+                  onClick={() => isPlayable && handleTileClick(tile)}
                 />
                 {selectedTile?.id === tile.id && (
-                  <div className="absolute -top-10 left-0 right-0 flex justify-between bg-gray-900 p-1 rounded shadow-lg z-30">
-                    {c.left && <button onClick={() => playTile(tile, 'left')} className="bg-blue-500 text-white text-xs px-2 py-1 hover:bg-blue-400">Izq</button>}
-                    {c.right && <button onClick={() => playTile(tile, 'right')} className="bg-blue-500 text-white text-xs px-2 py-1 hover:bg-blue-400">Der</button>}
+                  <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex gap-2 bg-gray-900/95 p-1.5 z-30" style={{ borderWidth: '2px', borderStyle: 'solid', borderColor: '#555' }}>
+                    <button onClick={() => handleSideChoice(tile, 'left')} className="pixel-btn bg-retro-azul text-white px-3 py-1 text-[10px]">Izq</button>
+                    <button onClick={() => handleSideChoice(tile, 'right')} className="pixel-btn bg-retro-naranja text-white px-3 py-1 text-[10px]">Der</button>
                   </div>
                 )}
               </div>
@@ -465,34 +267,35 @@ export default function Room() {
           })}
         </div>
         <div className="text-center">
-          {isMyTurn && canPlayAny && gameState.phase === 'playing' && (
-            <span className="text-yellow-400 text-sm">Es tu turno. Selecciona una ficha iluminada.</span>
+          {isMyTurn && canPlayAny && (
+            <span className="text-yellow-400 text-[10px]">Es tu turno. Selecciona una ficha.</span>
           )}
-          {isMyTurn && !canPlayAny && gameState.phase === 'playing' && (
-            <button onClick={handlePass} className="bg-red-600 text-white px-6 py-2 border-b-4 border-red-900 active:border-b-0 animate-pulse">
+          {isMyTurn && !canPlayAny && (
+            <button onClick={handlePass} className="pixel-btn bg-retro-rojo text-white px-6 py-2 text-[10px] animate-glow-pulse">
               ¡PASAR TURNO!
             </button>
           )}
-          {gameState.currentTurn !== myPlayerIndex && gameState.phase === 'playing' && (
-            <span className="text-gray-400 text-sm">Turno de: {gameState.players[gameState.currentTurn].name}</span>
+          {!isMyTurn && gameState.phase === 'playing' && (
+            <span className="text-gray-400 text-[10px]">
+              Turno de: <span className="text-retro-amarillo">{gameState.players[gameState.currentTurn]?.name}</span>
+            </span>
           )}
           {gameState.phase === 'roundOver' && (
-            <span className="text-yellow-400 text-sm animate-pulse">Preparando siguiente mano...</span>
+            <span className="text-yellow-400 text-[10px] animate-pulse">Preparando siguiente mano...</span>
           )}
         </div>
       </div>
 
       {gameState.gameOver && (
-        <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50">
-          <h1 className="text-4xl text-yellow-400 mb-4 animate-pulse">
-            {gameState.winnerTeam === 0 ? "¡GANAMOS!" : "¡PERDIMOS!"}
-          </h1>
-          <p className="text-white text-sm mb-4">
-            {gameState.scores[0]} - {gameState.scores[1]}
-          </p>
-          <button onClick={handleRevancha} className="bg-blue-600 text-white px-6 py-3 border-b-4 border-blue-800 active:border-b-0 font-mono">Revancha</button>
-        </div>
+        <VictoryScreen
+          isWin={gameState.winnerTeam === (gameState.players[myPlayerIndex]?.team ?? 0)}
+          scores={gameState.scores}
+          isZapato={gameState.log.some(l => l.includes('ZAPATO'))}
+          onRematch={handleRevancha}
+        />
       )}
+
+      <CRTOverlay />
     </div>
   );
 }

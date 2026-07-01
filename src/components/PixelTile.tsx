@@ -1,4 +1,18 @@
+'use client';
+
 import React from 'react';
+
+interface PixelTileProps {
+  left: number;
+  right: number;
+  width: number;
+  height: number;
+  isHorizontal?: boolean;
+  isDouble?: boolean;
+  playable?: boolean;
+  faceDown?: boolean;
+  onClick?: () => void;
+}
 
 const PIP_GRIDS: Record<number, [number, number][]> = {
   0: [],
@@ -9,18 +23,6 @@ const PIP_GRIDS: Record<number, [number, number][]> = {
   5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]],
   6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]],
 };
-
-interface TileProps {
-  left: number;
-  right: number;
-  isHorizontal?: boolean;
-  faceDown?: boolean;
-  tiny?: boolean;
-  compact?: boolean;
-  doubleMark?: boolean;
-  onClick?: () => void;
-  playable?: boolean;
-}
 
 function PipGroup({
   value, areaX, areaY, areaW, areaH,
@@ -49,39 +51,23 @@ function PipGroup({
   );
 }
 
-export default function Tile({
-  left, right, isHorizontal = false, faceDown = false, tiny = false,
-  compact = false, doubleMark = false, onClick, playable = false,
-}: TileProps) {
-  const SW = tiny ? 1.5 : 3;
+export default function PixelTile({
+  left, right, width: w, height: h,
+  isHorizontal = true, isDouble = false,
+  playable = false, faceDown = false, onClick,
+}: PixelTileProps) {
+  const SW = 3;
 
-  // Tiny face-down (rival hand) — horizontal
-  if (tiny && faceDown) {
-    return (
-      <svg width={28} height={14} viewBox="0 0 28 14" style={{ imageRendering: 'pixelated' }}>
-        <rect x={0} y={0} width={28} height={14} fill="#1a1a1a" stroke="#333" strokeWidth={1} rx={1} />
-        <line x1={14} y1={1} x2={14} y2={13} stroke="#2a2a2a" strokeWidth={0.5} />
-        <rect x={3} y={2} width={22} height={10} fill="none" stroke="#2a2a2a" strokeWidth={0.5} rx={0.5} />
-      </svg>
-    );
-  }
-
-  // Face-down (compact) — horizontal
   if (faceDown) {
-    const fw = compact ? 40 : 44;
-    const fh = compact ? 22 : 28;
     return (
-      <svg width={fw} height={fh} viewBox={`0 0 ${fw} ${fh}`} style={{ imageRendering: 'pixelated' }}>
-        <rect x={0} y={0} width={fw} height={fh} fill="#1a1a1a" stroke="#333" strokeWidth={2} rx={1} />
-        <line x1={5} y1={5} x2={fw - 5} y2={fh - 5} stroke="#2a2a2a" strokeWidth={1} />
-        <line x1={fw - 5} y1={5} x2={5} y2={fh - 5} stroke="#2a2a2a" strokeWidth={1} />
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ imageRendering: 'pixelated' }}>
+        <rect x={0} y={0} width={w} height={h} fill="#1a1a1a" stroke="#333" strokeWidth={2} rx={1} />
+        <line x1={4} y1={4} x2={w - 4} y2={h - 4} stroke="#2a2a2a" strokeWidth={1} />
+        <line x1={w - 4} y1={4} x2={4} y2={h - 4} stroke="#2a2a2a" strokeWidth={1} />
       </svg>
     );
   }
 
-  // Hand tile: always 44×80, vertical (isHorizontal controls divider)
-  const w = 44;
-  const h = 80;
   const innerW = w - SW * 2;
   const innerH = h - SW * 2;
 
@@ -90,15 +76,19 @@ export default function Tile({
   let divX1: number, divY1: number, divX2: number, divY2: number;
 
   if (isHorizontal) {
+    // Horizontal tile: divider is vertical line, halves are LEFT | RIGHT
     const halfW = innerW / 2;
     leftArea = { x: SW, y: SW, w: halfW, h: innerH };
     rightArea = { x: SW + halfW, y: SW, w: halfW, h: innerH };
-    divX1 = w / 2; divY1 = SW; divX2 = w / 2; divY2 = h - SW;
+    divX1 = w / 2; divY1 = SW;
+    divX2 = w / 2; divY2 = h - SW;
   } else {
+    // Vertical tile: divider is horizontal line, halves are TOP / BOTTOM
     const halfH = innerH / 2;
     leftArea = { x: SW, y: SW, w: innerW, h: halfH };
     rightArea = { x: SW, y: SW + halfH, w: innerW, h: halfH };
-    divX1 = SW; divY1 = h / 2; divX2 = w - SW; divY2 = h / 2;
+    divX1 = SW; divY1 = h / 2;
+    divX2 = w - SW; divY2 = h / 2;
   }
 
   return (
@@ -108,7 +98,6 @@ export default function Tile({
       viewBox={`0 0 ${w} ${h}`}
       style={{ imageRendering: 'pixelated', cursor: onClick ? 'pointer' : 'default' }}
       onClick={onClick}
-      className={playable ? 'animate-tile-float' : ''}
     >
       {playable && (
         <rect x={-3} y={-3} width={w + 6} height={h + 6} fill="none" stroke="#facc15" strokeWidth={2.5} rx={3}>
@@ -125,9 +114,9 @@ export default function Tile({
       <PipGroup value={left} areaX={leftArea.x} areaY={leftArea.y} areaW={leftArea.w} areaH={leftArea.h} />
       <PipGroup value={right} areaX={rightArea.x} areaY={rightArea.y} areaW={rightArea.w} areaH={rightArea.h} />
 
-      {doubleMark && (
+      {isDouble && (
         <g transform={`translate(${w / 2}, ${h / 2})`}>
-          <rect x={-5} y={-5} width={10} height={10} fill="#e63946" stroke="#fff" strokeWidth={1} transform="rotate(45)" />
+          <rect x={-4} y={-4} width={8} height={8} fill="#e63946" stroke="#fff" strokeWidth={0.8} transform="rotate(45)" />
         </g>
       )}
     </svg>

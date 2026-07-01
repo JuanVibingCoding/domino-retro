@@ -1,4 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Permanent+Marker&display=swap');
+@font-face {
+  font-family: 'Press Start 2P';
+  src: url('/fonts/PressStart2P-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Permanent Marker';
+  src: url('/fonts/PermanentMarker-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
 @tailwind base;
 @tailwind components;
@@ -12,37 +26,203 @@
   --color-ficha: #f4f1e8;
 }
 
+* {
+  image-rendering: pixelated;
+}
+
 body {
-  font-family: 'Press Start 2P', cursive;
+  font-family: 'Press Start 2P', monospace;
   background-color: var(--color-cemento);
   background-image:
-    radial-gradient(circle at 50% 50%, rgba(0,0,0,0.1) 1px, transparent 1px),
-    linear-gradient(135deg, var(--color-cemento) 0%, var(--color-tierra) 100%);
-  background-size: 20px 20px, 100% 100%;
-  image-rendering: pixelated;
+    radial-gradient(circle, rgba(0,0,0,0.08) 1px, transparent 1px),
+    radial-gradient(circle, rgba(0,0,0,0.04) 1px, transparent 1px);
+  background-size: 20px 20px, 10px 10px;
+  background-position: 0 0, 5px 5px;
+  overflow: hidden;
+}
+
+/* Patio background overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    linear-gradient(180deg,
+      rgba(210, 170, 120, 0.3) 0%,
+      rgba(180, 140, 90, 0.1) 40%,
+      rgba(160, 120, 70, 0.2) 100%
+    );
+  pointer-events: none;
+  z-index: 0;
 }
 
 .text-handwritten {
   font-family: 'Permanent Marker', cursive;
 }
 
-.table-wood {
-  background-color: var(--color-madera);
-  background-image:
-    repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(0,0,0,0.1) 10px, rgba(0,0,0,0.1) 11px),
-    linear-gradient(180deg, var(--color-madera) 0%, var(--color-madera-oscura) 100%);
-  border: 8px solid var(--color-madera-oscura);
-  box-shadow: inset 0 0 50px rgba(0,0,0,0.5), 0 0 20px rgba(0,0,0,0.3);
-  border-radius: 10px;
+/* CRT Scanlines */
+.crt-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.06) 0px,
+    rgba(0, 0, 0, 0.06) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: multiply;
 }
 
+.crt-overlay::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 60%,
+    rgba(0, 0, 0, 0.25) 100%
+  );
+}
+
+/* Scorebook */
 .scorebook {
   background-color: #fdfdfd;
   background-image:
-    linear-gradient(#e4e4e4 1px, transparent 1px);
-  background-size: 100% 25px;
-  border-left: 4px solid rgba(255, 0, 0, 0.2);
-  box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
+    linear-gradient(transparent 23px, #e4e4e4 23px, #e4e4e4 24px, transparent 24px);
+  background-size: 100% 24px;
+  background-position: 0 4px;
+  border-left: 3px solid rgba(255, 0, 0, 0.25);
+  border-radius: 2px;
+  box-shadow: 2px 2px 8px rgba(0,0,0,0.15), inset 0 0 20px rgba(0,0,0,0.03);
 }
 
+/* Tally marks */
+.tally {
+  font-family: 'Permanent Marker', cursive;
+  letter-spacing: 2px;
+}
 
+/* Pixel button */
+.pixel-btn {
+  font-family: 'Press Start 2P', monospace;
+  border: 3px solid #111;
+  box-shadow: 4px 4px 0px #111;
+  transition: all 0.1s;
+  cursor: pointer;
+}
+
+.pixel-btn:active {
+  box-shadow: 1px 1px 0px #111;
+  transform: translate(3px, 3px);
+}
+
+/* Player avatars */
+.pixel-avatar {
+  border: 3px solid #111;
+  box-shadow: 3px 3px 0px #111;
+  image-rendering: pixelated;
+}
+
+/* Board wood texture */
+.board-wood {
+  background-color: #5e3a1c;
+  background-image:
+    repeating-linear-gradient(90deg, transparent, transparent 12px, rgba(0,0,0,0.12) 12px, rgba(0,0,0,0.12) 13px),
+    linear-gradient(180deg, #6b4423 0%, #4a2d12 100%);
+  border: 6px solid #3d2510;
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.5), 0 8px 0 rgba(0,0,0,0.3);
+  border-radius: 8px;
+}
+
+/* Hand area */
+.hand-area {
+  background: linear-gradient(180deg, #1a1a1a 0%, #111 100%);
+  border-top: 4px solid #5e3a1c;
+  box-shadow: 0 -4px 12px rgba(0,0,0,0.3);
+}
+
+/* Tile shadow */
+.tile-shadow {
+  box-shadow: 2px 2px 0px #000;
+}
+
+/* Playable tile glow */
+.playable-glow {
+  animation: glowPulse 1.5s ease-in-out infinite;
+  outline: 3px solid #facc15;
+  outline-offset: 2px;
+}
+
+@keyframes glowPulse {
+  0%, 100% { outline-color: rgba(250, 204, 21, 0.6); }
+  50% { outline-color: rgba(250, 204, 21, 1); }
+}
+
+/* Victory confetti */
+.confetti {
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  top: -10px;
+  animation: confettiFall linear forwards;
+  z-index: 200;
+}
+
+@keyframes confettiFall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+/* Scrollbar pixel style */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #555;
+  border: 2px solid #2a2a2a;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .font-pixel {
+    font-size: 0.6rem;
+  }
+
+  .hand-area {
+    padding: 0.5rem;
+  }
+
+  .pixel-btn {
+    border-width: 2px;
+    box-shadow: 2px 2px 0px #111;
+  }
+}
+
+/* Landscape mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+  .hand-area {
+    padding: 0.25rem 0.5rem;
+  }
+}

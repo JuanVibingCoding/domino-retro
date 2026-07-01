@@ -1,23 +1,28 @@
-import { Tile, canPlayTile } from './dominoEngine';
+import { Tile, ValidMove } from './types';
+import { getValidMoves } from './dominoEngine';
 
-export function getBotMove(hand: Tile[], leftEnd: number | null, rightEnd: number | null): { tile: Tile, side: 'left' | 'right' } | null {
-  const playableTiles = hand.map(tile => {
-    const canPlay = canPlayTile(tile, leftEnd, rightEnd);
-    if (canPlay.left || canPlay.right) {
-      const sides: ('left' | 'right')[] = [];
-      if (canPlay.left) sides.push('left');
-      if (canPlay.right) sides.push('right');
-      return { tile, sides, value: tile.left + tile.right };
-    }
-    return null;
-  }).filter(Boolean) as { tile: Tile, sides: ('left' | 'right')[], value: number }[];
+export function getBotMove(
+  hand: Tile[],
+  leftEnd: number | null,
+  rightEnd: number | null,
+  opts?: { isFirstMoveOfRound?: boolean }
+): ValidMove | null {
+  const moves = getValidMoves(hand, leftEnd, rightEnd, opts);
+  if (moves.length === 0) return null;
 
-  if (playableTiles.length === 0) return null;
+  const scored = moves.map(m => ({
+    ...m,
+    value: m.tile.left + m.tile.right,
+  }));
 
-  playableTiles.sort((a, b) => b.value - a.value);
+  scored.sort((a, b) => b.value - a.value);
 
-  const selected = playableTiles[0];
-  const side = selected.sides[0];
+  const selected = scored[0];
+  const side = selected.side === 'left' && scored.some(m => m.side === 'left' && m.value === selected.value)
+    ? 'left'
+    : selected.side === 'right' && scored.some(m => m.side === 'right' && m.value === selected.value)
+    ? 'right'
+    : selected.side;
 
   return { tile: selected.tile, side };
 }
